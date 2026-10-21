@@ -1,0 +1,7 @@
+# MATLAB autosave and editor backup files
+*.asv
+*.m~
+
+# macOS
+.DS_Store
+__MACOSX/

@@ -1,0 +1,4 @@
+folder,file_name,group,to_discard,organoid_label,crop_ellipse,crop_excel,file_name_3Brain,source,include
+/path/to/recording_1,recording_1_name,wt,,,,,,Kilosort,1
+/path/to/recording_2,recording_2_name,het,3 17 25,,,,,Kilosort,1
+/path/to/recording_3,recording_3_name,het,,org1,26 18 16 16,,,Kilosort,1
