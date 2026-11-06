@@ -51,7 +51,7 @@ P.QualityControl_General.PERCENTILE = 98;                       % percentile to 
 P.QualityControl_General.PERCENTILE_TOP = 99.5;                 % percentile to identify the outliers with too high firing rate, among ALL clusters (default: 99.5)
 P.QualityControl_General.ISI_RATIO = 8;                         % threshold for the ratio of isi during bursting vs non-bursting; the lower, the more permissive (default: 8)
 P.QualityControl_General.N_SPIKES_BURST = 0.90;                 % threshold for the proportion of spikes in bursts; if the cluster is mostly bursting, probably is a neuron (default: 0.90)
-P.QualityControl_General.TTX_EFFECT = 0.15;                     % minimum effect of TTX to be considered; proportion relative to the maximum frequency (0.10 - 0.20)
+P.QualityControl_General.TTX_EFFECT = 0.20;                     % minimum effect of TTX to be considered; proportion relative to the maximum frequency (0.10 - 0.20)
 P.QualityControl_General.BURST_METHOD = 1;                      % method for the burst detection (1)
 P.QualityControl_General.MIN_LENGTH = 90;                       % minimum duration of a recording condition, in sec (default: 90)
 P.QualityControl_General.N_PLOT = 20;                           % number of clusters for raster plots (20)
@@ -68,7 +68,7 @@ P.lvr.MIN_N = 3;
 %%  3) QualityControl_HyperSynch
 
 % QualityControl_HyperSynch
-P.QualityControl_HyperSynch.N_ITERATION = 500;                  % number of iterations for the shuffling (default: 500-1000)
+P.QualityControl_HyperSynch.N_ITERATION = 1000;                  % number of iterations for the shuffling (default: 500-1000)
 P.QualityControl_HyperSynch.N_SPIKES_MINIMUM = 5;               % minimum number of hypersynchronized spikes to trigger assessment; it will apply to any category (bursting, nonbursting and total) (default: 5)
 P.QualityControl_HyperSynch.N_SPIKES_BURST = 8;                 % threshold for the percentage of hypersynchonized spikes within burst, in % (default: 8%)
 P.QualityControl_HyperSynch.N_SPIKES_NONBURST = 8;              % threshold for the percentage of hypersynchonized spikes outside burst, in % (default: 8%)
@@ -151,7 +151,7 @@ P.IntegrateDataSets.N_SPIKES_MINIMUM = 20;                      % minimum number
 P.IntegrateDataSets.N_SPIKES_BURST_CUT = 50;                    % threshold for the percentage of hypersynchonized spikes within burst, in % (default: 50%)
 P.IntegrateDataSets.N_SPIKES_NONBURST_CUT = 20;                 % threshold for the percentage of hypersynchonized spikes outside burst to make the first cut and proceed with the shuffling, in % (default: 20%)
 P.IntegrateDataSets.N_SPIKES_TOTAL_CUT = 40;                    % threshold for the percentage of hypersynchonized spikes to make the first cut and proceed with the shuffling, in % (default: 40%)
-P.IntegrateDataSets.N_SPIKES_3BRAIN_CUT = 50;                   % threshold for the percentage of hypersynchonized spikes in the 3Brain signal, in % (default: 60%)
+P.IntegrateDataSets.N_SPIKES_3BRAIN_CUT = 60;                   % threshold for the percentage of hypersynchonized spikes in the 3Brain signal, in % (default: 60%)
 P.IntegrateDataSets.OPTION_METHOD_BURST = 1;                    % method for the bursting detection (=1, Maximal Interval)
 P.IntegrateDataSets.REFRACTORY_PERIOD = 0;                      % refractory period for the shuffling, in msec (default: 0)
 P.IntegrateDataSets.METHOD_SHUFFLING = 2;                       % method for the spike-train shuffling (=1, uniform; =2, biphasic <burst and non-bust>)
@@ -183,7 +183,7 @@ P.Analyze_spikeTrain.NETWORK_BURST_ANALYSIS_METHOD = 2;         % algorithm to b
 P.Analyze_spikeTrain.opt_checking = 0;
 P.Analyze_spikeTrain.print_Plots = 1;                           % option to save the rater plot of all neurons
 P.Analyze_spikeTrain.plot_option = 0;
-P.Analyze_spikeTrain.plot_network_burst = 1;
+P.Analyze_spikeTrain.plot_network_burst = 0;
 
 % Analyze_spikeTrain
 P.Analyze_spikeTrain.MIN_N_BURST = 5;                           % minimum number of burst events to be considered a bursting neuron (default: 5)
@@ -224,16 +224,16 @@ P.BurstFeatures.COUNT_WINDOW = 60;                              % length of the 
 P.NetworkBurstDetection.MIN_CHAN = 6;                           % minimum number of participating channels/units to classify an organoid as network bursting (default: 6)
 P.NetworkBurstDetection.MIN_CHAN_BURST = 5;                     % minimum number of channels/units in a single network burst (default: 5)
 P.NetworkBurstDetection.THRESHOLD_BURST_WITH_UNITS = 0.50;      % minimum proportion of potential network burst with MIN_CHAN_BURST units (default: 0.50)
-P.NetworkBurstDetection.MIN_CHAN_RATIO = 0.075;                 % minimum number of participating channels/units to classify an organoid as network bursting, as a proportion of the total number of units (default: 0.075)
-P.NetworkBurstDetection.MIN_CHAN_BURST_RATIO = 0.01;            % minimum number of channels/units in a single network burst, as a proportion of the total number of units (default: 0.05)
+P.NetworkBurstDetection.MIN_CHAN_RATIO = 0.075;                 % minimum number of participating channels/units to classify an organoid as network bursting, as a proportion of the total number of units (default: 0.075-0.10)
+P.NetworkBurstDetection.MIN_CHAN_BURST_RATIO = 0.02;            % minimum number of channels/units in a single network burst, as a proportion of the total number of units (default: 0.02-0.05)
 P.NetworkBurstDetection.FACTOR_FIRST_ROUND = 0.80;              % (default: 0.8)
-P.NetworkBurstDetection.MIN_CHAN_SECONDARY = 0.25;              % minimum number of participating channels/units to accept the secondary events, in terms of the number of participating units in the primary events (default: 0.25)
+P.NetworkBurstDetection.MIN_CHAN_SECONDARY = 0.20;              % minimum number of participating channels/units to accept the secondary events, in terms of the number of participating units in the primary events (default: 0.20)
 P.NetworkBurstDetection.MIN_PEAK2_GAP = 1;                      % minimum number of secondary events per gap/window, after a level-1 primary event (default: 1)
-P.NetworkBurstDetection.GAP_WITH_PEAK = 0.75;                   % minimum proportion of gaps/windows (level-1 primary events) followed by MIN_PEAK2_GAP secondary events, to accept
-                                                                % the secondary events (default: 0.75)
+P.NetworkBurstDetection.GAP_WITH_PEAK = 0.50;                   % minimum proportion of gaps/windows (level-1 primary events) followed by MIN_PEAK2_GAP secondary events, to accept
+                                                                % the secondary events (default: 0.50; it was 0.75 until November 2026)
 
 % NetworkBurstDetection: parameters of the option method1 (they depend on the method)
-P.NetworkBurstDetection.method1.BIN = 0.3;                      % size of the temporal bin to calculate the population firing rate, in sec (0.2-0.4)
+P.NetworkBurstDetection.method1.BIN = 0.2;                      % size of the temporal bin to calculate the population firing rate, in sec (0.2-0.4)
 P.NetworkBurstDetection.method1.THRESHOLD = 5.0;                % in terms of the standard deviation (ventral: 3.0 - 5.0 ; dorsal: 5.0 - 8.0)
 P.NetworkBurstDetection.method1.MIN_ROBUST = 4;                 % minimum number of robustly participating clusters (default: 4, as in method 2)
 
@@ -241,15 +241,21 @@ P.NetworkBurstDetection.method1.MIN_ROBUST = 4;                 % minimum number
 P.NetworkBurstDetection.method2.BIN_MIN = 0.01;                 % minimum size of the temporal bin to calculate the population firing rate, in sec (default: 0.01 sec)
 P.NetworkBurstDetection.method2.BIN_MAX = 3.0;                  % maximum size of the temporal bin to calculate the population firing rate, in sec (default: 3.0 sec)
 P.NetworkBurstDetection.method2.THRESHOLD = 5.0;                % in terms of the standard deviation (default: 5.0)
-P.NetworkBurstDetection.method2.BIN_DEFAULT = 0.20;             % default size of the temporal bin to calculate the population firing rate, in sec (default: 0.25 sec)
+P.NetworkBurstDetection.method2.BIN_DEFAULT = 0.15;             % default size of the temporal bin to calculate the population firing rate, in sec (default: 0.15 sec)
 P.NetworkBurstDetection.method2.MIN_ROBUST = 4;                 % minimum number of robustly participating clusters (default: 4)
 
 % NetworkBurstDetection: parameters of the option method3 (they depend on the method)
 P.NetworkBurstDetection.method3.BIN_MIN = 0.01;                 % minimum size of the temporal bin to calculate the population firing rate, in sec (default: 0.01 sec)
 P.NetworkBurstDetection.method3.BIN_MAX = 3.0;                  % maximum size of the temporal bin to calculate the population firing rate, in sec (default: 3.0 sec)
-P.NetworkBurstDetection.method3.THRESHOLD = 6.0;                % in terms of the standard deviation (default: 5.0; it must be >3.5)
-P.NetworkBurstDetection.method3.BIN_DEFAULT = 0.10;             % default size of the temporal bin to calculate the population firing rate, in sec (default: 0.15 sec)
-P.NetworkBurstDetection.method3.MIN_ROBUST = 5;                 % minimum number of robustly participating clusters (default: 5)
+P.NetworkBurstDetection.method3.THRESHOLD = 5.0;                % in terms of the standard deviation (default: 5.0; it must be >3.5)
+P.NetworkBurstDetection.method3.BIN_DEFAULT = 0.10;             % default size of the temporal bin to calculate the population firing rate, in sec (default: 0.10 sec)
+P.NetworkBurstDetection.method3.MIN_ROBUST = 4;                 % minimum number of robustly participating clusters (default: 4)
+
+% NetworkBurstDetection: parameters of the option method4 (new, November 2026: participation signal with surrogate thresholds)
+P.NetworkBurstDetection.method4.BIN_MIN = 0.02;                 % minimum size of the temporal bin, in sec (default: 0.02 sec; in smaller bins, only near-exact synchrony)
+P.NetworkBurstDetection.method4.BIN_MAX = 1.0;                  % maximum size of the temporal bin, in sec (default: 1.0 sec; in larger bins, most units fire in every bin)
+P.NetworkBurstDetection.method4.BIN_DEFAULT = 0.10;             % default size of the temporal bin, in sec (default: 0.10 sec)
+P.NetworkBurstDetection.method4.MIN_ROBUST = 5;                 % minimum number of robustly participating clusters (default: 5, as in method 3)
 
 % DynamicPopActDetect
 P.DynamicPopActDetect.SCALING = 2.0;                            % factor to scale up the bin size to run the dynamic search (default: 2.0)
@@ -258,27 +264,39 @@ P.DynamicPopActDetect.N_SHORTLIST = 3;                          % number of pre-
 P.DynamicPopActDetect.CHANGE_THRESHOLD = 0.40;                  % threshold for the metric: change of number of burst events (default: 0.40)
 P.DynamicPopActDetect.OPTION_LEVEL = 1;                         % =1, just analyze the level1 peaks to determine the optimal bin size and the secondary peaks
                                                                 % =0, analyze all peaks (level0 and level1) to determine the optimal bin size
-P.DynamicPopActDetect.MAX_IT = 100;
+P.DynamicPopActDetect.MAX_IT = 200;
+% (new, November 2026) selection of the bin size (N_SHORTLIST and CHANGE_THRESHOLD above are used only with BIN_SELECTION = 'legacy')
+P.DynamicPopActDetect.BIN_SELECTION = 'plateau';                % 'plateau': centre of the widest range of bin sizes with the same level-1 events; 'legacy': before November 2026
+P.DynamicPopActDetect.AGREEMENT = [0.90; 0.80; 0.75];           % minimum agreement of the level-1 events between neighbouring bin sizes, tried in this order (default: 0.90, 0.80, 0.75)
+P.DynamicPopActDetect.MIN_EVENTS = 2;                           % minimum number of level-1 events at each bin size of a plateau (default: 2)
+P.DynamicPopActDetect.MATCH_MIN = 0.10;                         % two events match if their peaks are within the larger bin size, and at least MATCH_MIN, in sec (default: 0.10)
 
 % PopActivityPeak_Integration
 P.PopActivityPeak_Integration.BIN_DEFAULT1 = 0.100;             % default size of the temporal bin to calculate the population firing rate, in sec (default: 0.10 sec)
 P.PopActivityPeak_Integration.BIN_DEFAULT2 = 0.150;             % default size of the temporal bin to calculate the population firing rate, in sec (default: 0.15 sec)
 
 % PopulationActivityDetection
-P.PopulationActivityDetection.START_LEVEL = 0.20;               % proportion of the peak amplitude of the network burst to identifity the starting point (default: 0.10)
-P.PopulationActivityDetection.END_LEVEL = 0.20;                 % proportion of the peak amplitude of the network burst to identifity the ending point (default: 0.10)
+P.PopulationActivityDetection.START_LEVEL = 0.20;               % proportion of the peak amplitude of the network burst to identifity the starting point (default: 0.20)
+P.PopulationActivityDetection.END_LEVEL = 0.20;                 % proportion of the peak amplitude of the network burst to identifity the ending point (default: 0.20)
 P.PopulationActivityDetection.SMOOTH_FACTOR = [3; 5; 7];        % standard smoothing window length, in number of bins (default: 3; odd for symmetric smoothing)
 P.PopulationActivityDetection.MIN_POINTS = 3;
 P.PopulationActivityDetection.OUTLIER_TOP = 99.5;               % upper percentile to identify outliers, before calculating the noise (dafault: 99)
 P.PopulationActivityDetection.PERCENTILE_TOP = 95.0;            % upper percentile to identify the "big mountains" (default: 95)
-P.PopulationActivityDetection.CHAIN = 5;                        % total number of consecutive high-value to identify "big mountains" (default: 3)
-P.PopulationActivityDetection.FACTOR_MOUNTAIN1 = 2.0;           % (default: 1.8) (in 100 bin and 5 high-values, the chances of having 3 or more consecutives high-values is 1/170)
+P.PopulationActivityDetection.CHAIN = 5;                        % total number of consecutive high-value to identify "big mountains" (default: 5)
+P.PopulationActivityDetection.FACTOR_MOUNTAIN1 = 2.0;           % (default: 2.0) (in 100 bin and 5 high-values, the chances of having 3 or more consecutives high-values is 1/170)
 P.PopulationActivityDetection.FACTOR_MOUNTAIN2 = 2.5;           % (default: 2.5) (in 100 bin and 5 high-values, the chances of having 3 or more consecutives high-values is 1/170)
 P.PopulationActivityDetection.BIN_REDUCT = 0.30;                % (default: 0.30)
 P.PopulationActivityDetection.MIN_THRESHOLD = 3.0;              % (default: 3.0)
-P.PopulationActivityDetection.ACTIVITY_THRESHOLD = 0.03;        % minimum level of spiking frequency for an individual electrode to be considered active, in Hz (default: 0.05)
-                                                                % (revised October 2026: 0.05 -> 0.03 Hz, user's choice)
+P.PopulationActivityDetection.ACTIVITY_THRESHOLD = 0.05;        % minimum level of spiking frequency for an individual electrode to be considered active, in Hz (default: 0.05)
 P.PopulationActivityDetection.PEAK_THRESHOLD = 20;              % threshold to run the second round of searching, relative to median firing rate (default: 20)
+P.PopulationActivityDetection.TAIL_FACTOR = 3;                  % (new, November 2026) the tail of a large event lasts until the signal returns to its median, and at most
+                                                                % TAIL_FACTOR times the duration of the event after its end (default: 3)
+% PopulationActivityDetection: option 4 of NetworkBurstDetection (new, November 2026; participation signal, thresholds from surrogates)
+P.PopulationActivityDetection.N_SURROGATE = 1000;               % number of surrogates; each unit is circularly shifted by an independent random offset (default: 1000)
+P.PopulationActivityDetection.SURROGATE_SEED = 0;               % seed of the random offsets (the same seed gives the same surrogates)
+P.PopulationActivityDetection.ALPHA_LARGE = 0.05;               % large (level-1) events: peak above the (1-ALPHA_LARGE) quantile of the surrogate maxima (max statistic) (default: 0.05)
+P.PopulationActivityDetection.PERCENTILE_SMALL = 99;            % small (level-0) events: peak above this percentile of all the surrogate bins pooled (Bocchio et al. 2020) (default: 99)
+P.PopulationActivityDetection.ALPHA_SECONDARY = 0.05;           % secondary events: peak above the (1-ALPHA_SECONDARY) quantile of the surrogate maxima within the window (default: 0.05)
 
 % refinePeakDetection
 P.refinePeakDetection.smoothWindow = 3;                         % smoothing window length, in number of bins (default: 3; odd for symmetric smoothing)
@@ -304,8 +322,8 @@ P.test_bimodality.RNG_SEED = 0;                                 % seed for the r
 P.test_bimodality.THRESHOLD_BC = 0.555;                         % (default: 0.555)
 
 % PopulationActivitySize
-P.PopulationActivitySize.MIN_CHAN = 6;                          % minimum number of channels involved in a single network burst (default: 5)
-P.PopulationActivitySize.MIN_MULTIPLE = 5;                      % minimum number of channels with multiple spikes involved in a single network burst (default: 3)
+P.PopulationActivitySize.MIN_CHAN = 6;                          % minimum number of channels involved in a single network burst (default: 6)
+P.PopulationActivitySize.MIN_MULTIPLE = 4;                      % minimum number of channels with multiple spikes involved in a single network burst (default: 4)
 P.PopulationActivitySize.MULTIPLE_SPIKE = 2;                    % minimum number of spikes to label as multiple (default: 2)
 P.PopulationActivitySize.SAFE_K = 0.40;                         % when saving the spikes for each network burst event, the extra time is added on each side (default: 0.4)
 
@@ -325,6 +343,11 @@ P.Optimal_secondaryPeak.BIN2_FACTOR_LOW = [0.40; 0.20; 1.00];   % reduction fact
 P.Optimal_secondaryPeak.BIN2_FACTOR_HIGH = [0.30; 0.12; 0.75; 0.05]; % reduction factors tested for the bin size, when the bin of the primary events is >= BIN_DEFAULT (opt_binopti = 1)
 P.Optimal_secondaryPeak.BIN2_FACTOR_FIXED = 0.30;               % reduction factor for the bin size, without optimization (opt_binopti = 0) (default: 0.30)
                                                                 % (revised October 2026: the three factors above were written in the "switch" below; same values)
+% (new, November 2026) separation of the secondary events from their large event, at the bin of the secondary search
+P.Optimal_secondaryPeak.SMOOTH_FINE = 3;                        % smoothing of the signal at the bin of the secondary search, in number of bins (+SMOOTH_ADD) (default: 3)
+P.Optimal_secondaryPeak.START_LEVEL_FINE = 0.50;                % the search starts where the large event falls to this fraction of its height above the median of the gap (default: 0.50)
+P.Optimal_secondaryPeak.SEPARATION_LEVEL = 0.50;                % between the two peaks, the signal must fall below this fraction of the height of the secondary peak (default: 0.50)
+P.Optimal_secondaryPeak.MIN_DROP_Z = 3;                         % (option 4) minimum drop, in units of its binomial sampling noise (default: 3)
 
 
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -337,9 +360,13 @@ P.NetworkBurstPlayers.MIN_CHAN_BURST = 5;                       % minimum number
 P.NetworkBurstPlayers.MIN_CHAN_BURST_RATIO = 0.05;              % minimum proportion of bursting channels involved in a single network burst, relative to the median of bursting participating units (default: 0.4)
 P.NetworkBurstPlayers.MIN_MULTIPLE = 3;                         % minimum number of channels with multiple spikes involved in a single network burst (default: 3)
 P.NetworkBurstPlayers.MIN_MULTIPLE_RATIO = 0.03;                % minimum proportion of channels with multiple spikes involved in a single network burst, relative to the total number of units (default: 0.03)
-P.NetworkBurstPlayers.MIN_PARTICIPATION_TONIC = 0.65;           % proportion of solid network burst in which a non-bursting channel has to participated to be counted (default: 0.95)
-P.NetworkBurstPlayers.MIN_PARTICIPATION_PHASIC = 0.25;          % proportion of solid network burst in which a bursting channel has to participated to be counted (default: 0.6)
+P.NetworkBurstPlayers.MIN_PARTICIPATION_TONIC = 0.75;           % proportion of solid network burst in which a non-bursting channel has to participated to be counted (default: 0.75; 0.65 until November 2026)
+P.NetworkBurstPlayers.MIN_PARTICIPATION_PHASIC = 0.50;          % proportion of solid network burst in which a bursting channel has to participated to be counted (default: 0.50; 0.25 until November 2026)
 P.NetworkBurstPlayers.MIN_SOLID_BURST = 3;                      % minimum number of solid burst to classify the channels as solid vs weak (default: 3)
+% (new, November 2026) the three values above apply to the large (level-1) events; these three to the small (level-0) events (robust in either)
+P.NetworkBurstPlayers.MIN_PARTICIPATION_TONIC_SMALL = 0.75;     % proportion of the solid small events in which a non-bursting unit has to participate (default: 0.75)
+P.NetworkBurstPlayers.MIN_PARTICIPATION_PHASIC_SMALL = 0.50;    % proportion of the solid small events in which a bursting unit has to burst (default: 0.50)
+P.NetworkBurstPlayers.MIN_SOLID_BURST_SMALL = 3;                % minimum number of solid small events to look for robust units in them (default: 3)
 % MIN_PEAK2_GAP: the same value as NetworkBurstDetection.MIN_PEAK2_GAP (see P.links at the end; used only if FAST_MODE = 0)
 % GAP_WITH_PEAK: the same value as NetworkBurstDetection.GAP_WITH_PEAK (see P.links at the end; used only if FAST_MODE = 0)
 P.NetworkBurstPlayers.MIN_PARTICIPATION_SECONDARY = 0.40;       % minimum proportion of secondary network bursts in which a channel has to participate (default: 0.40)
@@ -374,7 +401,7 @@ P.shuffleCache.MAX_CACHE_MB = 1000;                             % maximum memory
 %%  7d) Clustering of the network burst events
 
 % clusterNetburst
-P.clusterNetburst.MIN_PRIMARY_EVENTS = 3;                       % the clustering runs when there are MORE than MIN_PRIMARY_EVENTS primary events (i.e., at least 4)
+P.clusterNetburst.MIN_PRIMARY_EVENTS = 4;                       % the clustering runs when there are MORE than MIN_PRIMARY_EVENTS primary events (i.e., at least 4)
                                                                 % (revised October 2026: comment clarified; before, "minimum number of primary events to run the clustering")
 
 % cluster_neuronal_events

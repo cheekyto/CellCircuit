@@ -20,7 +20,7 @@ test = 0;
 %   bin0:       original size of the temporal bin to calculate the population firing rate, in sec        
 %   start_level:proportion of the peak amplitude of the network burst to identifity the starting point    
 %   end_level:  proportion of the peak amplitude of the network burst to identifity the ending point
-%   opt_norm:   =0, No normalization; =1: normalization of the firing rate
+%   opt_norm:   =0, No normalization; =1: normalization of the firing rate; =2: participation (fraction of units with a spike in the bin)
 %   spike_merged:   (optional) output of "mergeSpikeTrains(units, spikeTimestamp)"; PopulationActivityDetection builds it once for all the peaks
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -30,6 +30,7 @@ test = 0;
 % refinePeakDetection.peakAmp:   Amplitude of the peak of network burst      
 % refinePeakDetection.start:      start point of network burst, in sec
 % refinePeakDetection.end:        last point of network burst, in sec
+% refinePeakDetection.start50, end50: (new, November 2026) the same, at 50% of the height of the peak (half-width), reported as a metric
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%   PARAMETERS   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -58,6 +59,8 @@ fin = fin0+width*WINDOW_FACTOR;
 peakTime = nan(numel(BIN_FACTOR),1);
 startTime = nan(numel(BIN_FACTOR),1);
 endTime = nan(numel(BIN_FACTOR),1); 
+startTime50 = nan(numel(BIN_FACTOR),1);                                     % (new, November 2026) edges at 50% of the height of the peak
+endTime50 = nan(numel(BIN_FACTOR),1);
 peakAmp = nan;
 
 if test && opt_plot
@@ -87,7 +90,9 @@ first_spike = first_at_or_above(spike_merged.time, edges(1));                   
 last_spike = first_above(spike_merged.time, edges(end)) - 1;                    % last spike <= edges(end)
 bin_idx = discretize(spike_merged.time(first_spike:last_spike), edges);         % bin of each spike (same bin rules as "histcounts")
 counts = accumarray([bin_idx(:), spike_merged.unit(first_spike:last_spike)], 1, [numel(binMidPoint), n_clusters]);  % spike count per bin (row) and cluster (column)
-if opt_norm
+if opt_norm == 2
+    spikes_indiv = double(counts > 0);                                          % (new, November 2026) participation: the cluster fires in the bin
+elseif opt_norm
     spikes_indiv = counts ./ spike_merged.nSpikes(:)';                          % normalized spike count (a cluster without spikes gives NaN, as "bin_spike_time")
 else
     spikes_indiv = counts;                                                      % total spike count per bin
@@ -158,6 +163,7 @@ else
     endTime(k) = time_binned(end_Nburst);                                   % (no crossing: midpoint of the lowest bin, as before)
 end
 clear aux shift idx_min
+[startTime50(k), endTime50(k)] = level_crossings(smoothedSpikes, time_binned, idx_peak, 0.5*peak);   % (new, November 2026) half-width
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%     Plot during the code developing phase
@@ -179,6 +185,8 @@ refinePeakDetection.peak = median(peakTime, 'omitnan');
 refinePeakDetection.peakAmp = peakAmp;
 refinePeakDetection.start = median(startTime, 'omitnan');
 refinePeakDetection.end = median(endTime, 'omitnan');
+refinePeakDetection.start50 = median(startTime50, 'omitnan');
+refinePeakDetection.end50 = median(endTime50, 'omitnan');
 
 end
 
@@ -213,5 +221,30 @@ while lo < hi
     end
 end
 idx = lo;
+
+end
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+function [startTime, endTime] = level_crossings(signal, time_binned, idx_peak, level)
+
+% crossings of "level" to the left and to the right of the peak, by linear interpolation between bins, as the edges at 20% above;
+% when the signal does not go below the level, the lowest point on that side (new, November 2026)
+
+signal = signal(:);     time_binned = time_binned(:);
+aux = find(signal(1:idx_peak) < level, 1, 'last');
+if ~isempty(aux)
+    startTime = time_binned(aux) + (level - signal(aux))/(signal(aux+1) - signal(aux))*(time_binned(aux+1) - time_binned(aux));
+else
+    [~, idx_min] = min(signal(1:idx_peak));
+    startTime = time_binned(idx_min);
+end
+aux = find(signal(idx_peak:end) < level, 1, 'first');
+if ~isempty(aux)
+    aux = aux + idx_peak - 1;
+    endTime = time_binned(aux-1) + (signal(aux-1) - level)/(signal(aux-1) - signal(aux))*(time_binned(aux) - time_binned(aux-1));
+else
+    [~, idx_min] = min(signal(idx_peak:end));
+    endTime = time_binned(idx_min + idx_peak - 1);
+end
 
 end

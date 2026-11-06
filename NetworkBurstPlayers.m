@@ -1,4 +1,4 @@
-function NetworkBurstPlayers = NetworkBurstPlayers(spikeTimestamp, range, PopulationActivityDetected, BurstDetected, option, bin, threshold, opt_distance, option_plot)
+function NetworkBurstPlayers = NetworkBurstPlayers(spikeTimestamp, range, PopulationActivityDetected, BurstDetected, option, bin, threshold, opt_distance, option_plot, opt_norm)
 
 % function to identify and classify the units involved in network bursting
 % (spikeTimestamp, PopulationActivityDetected, and BurstDetected should be restricted to the same temporal window)
@@ -6,6 +6,9 @@ function NetworkBurstPlayers = NetworkBurstPlayers(spikeTimestamp, range, Popula
 % the option = 1 runs a first screening, classifying the potential events into WEAK and SOLID. It also identify the robustly pariticipating clusters
 
 option_test = 2;
+if nargin < 10
+    opt_norm = 1;                                                           % (new, November 2026) normalized signal, as before
+end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%   INPUTS   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -30,6 +33,8 @@ option_test = 2;
 %   option = 1          First screening: robust vs weak network bursts 
 %          = 2          Statistical assessement
 %          = 3          Only participating channels
+%   opt_norm:   (optional, new November 2026) population signal of the final detection of option 2 (see "PopulationActivityDetection"):
+%               =1, normalized firing rate (default, as before); =2, participation with surrogate thresholds (option 4 of "NetworkBurstDetection")
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%   OUTPUT   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -68,13 +73,21 @@ MIN_MULTIPLE = 3;                               % minimum number of channels wit
 MIN_MULTIPLE_RATIO = 0.03;                      % minimum proportion of channels with multiple spikes involved in a single network burst, relative to the total number of units (default: 0.03)
 
 % to classify the units
-MIN_PARTICIPATION_TONIC = 0.65;                 % proportion of solid network burst in which a non-bursting channel has to participated to be counted (default: 0.95)
-MIN_PARTICIPATION_PHASIC = 0.25;                % proportion of solid network burst in which a bursting channel has to participated to be counted (default: 0.6)
+MIN_PARTICIPATION_TONIC = 0.75;                 % proportion of solid network burst in which a non-bursting channel has to participated to be counted (default: 0.95)
+                                                % (revised November 2026: 0.65 -> 0.75, user's choice; now for the large events only)
+MIN_PARTICIPATION_PHASIC = 0.50;                % proportion of solid network burst in which a bursting channel has to participated to be counted (default: 0.6)
+                                                % (revised November 2026: 0.25 -> 0.50, user's choice; now for the large events only)
 MIN_SOLID_BURST = 3;                            % minimum number of solid burst to classify the channels as solid vs weak (default: 3)
+% (new, November 2026; user's choice) the robust units are found separately in the level-1 (large) and in the level-0 (small) primary events:
+% the three parameters above apply to the large events, and these three to the small events (a unit is robust if it is robust in either)
+MIN_PARTICIPATION_TONIC_SMALL = 0.75;           % proportion of the solid small events in which a non-bursting unit has to participate (default: 0.75)
+MIN_PARTICIPATION_PHASIC_SMALL = 0.50;          % proportion of the solid small events in which a bursting unit has to burst (default: 0.50)
+MIN_SOLID_BURST_SMALL = 3;                      % minimum number of solid small events to look for robust units in them (default: 3)
 
 % to assess the secondary peaks
 MIN_PEAK2_GAP = 1;                              % minimum number of secondary peaks per gap/window (default: 1)
-GAP_WITH_PEAK = 0.75;                           % minimum proportion of primary peaks followed by secondary peaks (default: 0.75)                    
+GAP_WITH_PEAK = 0.50;                           % minimum proportion of primary peaks followed by secondary peaks (default: 0.50)
+                                                % (revised November 2026: 0.75 -> 0.50, the same value as in "NetworkBurstDetection")
 
 MIN_PARTICIPATION_SECONDARY = 0.40;             % minimum proportion of secondary network bursts in which a channel has to participate (default: 0.40)        
 
@@ -157,26 +170,43 @@ switch option
 
         %% Identify the neurons that robustly participate in solid primary network bursts
 
-            participating_channel1 = zeros(n_channels,1);
-            n_solid = max(NetworkBurstPlayers.nBurst(2), MIN_SOLID_BURST);              % total number of solid primary network burst events
-            solid_event = [NetworkBurstPlayers.IndivBurst(1:Npeak1).solid]' == 1;       % (revised October 2026) participation is counted only in the solid events, for both rules
-                                                                                        % (the thresholds are proportions of the solid events; before, weak events also counted)
-            for ch=1:n_channels                                                         % across all clusters
-                aux1 = find((burst_id1(:,ch)==1 | burst_id1(:,ch)==3) & solid_event);   % index of solid burst events where the neuron ch fires without bursting: one spike (=1) or several spikes (=3)
-                                                                                        % (revised October 2026: the events with several spikes but no burst, =3, were not counted)
-                aux2 = find(burst_id1(:,ch)==2 & solid_event);                          % index of solid burst events where the neuron ch displays individual bursts
-                if numel(aux2) > numel(aux1)                                            % bursting neuron
-                    if numel(aux2)>n_solid*MIN_PARTICIPATION_PHASIC                     % enough bursting during network events
-                        participating_channel1(ch) = 1;                                 % label the neuron as robust participant
-                    end
-                else                                                                    % tonic neuron
-                    if numel(aux1)+numel(aux2)>n_solid*MIN_PARTICIPATION_TONIC           % enough activity during network events (revised October 2026: per-unit rule restored;
-                                                                                        %  the line used "IndivBurst(k).nChannel.total", where k was left over from a previous loop,
-                                                                                        %  so every tonic unit got the same decision, based on the last event)
-                        participating_channel1(ch) = 1;                                 % label the neuron as robust participant
-                    end
-                end
+            % (revised November 2026; user's choice) the robust units are found separately in each class of solid events: in the level-1 (large)
+            % events, counted over them (at least MIN_SOLID_BURST), and in the level-0 (small) events, counted over them, only when there are at
+            % least MIN_SOLID_BURST_SMALL; a unit is robust if it is robust in either. Before, both classes were pooled: many small events (e.g.,
+            % bumps on the tails of large events) diluted the participation in the large events, and moved the robust units (the previous code,
+            % commented, below)
+            solid_event = [NetworkBurstPlayers.IndivBurst(1:Npeak1).solid]' == 1;       % (revised October 2026) participation is counted only in the solid events
+            if isfield(NetworkBurstPlayers.IndivBurst, 'level')
+                large_event = [NetworkBurstPlayers.IndivBurst(1:Npeak1).level]' == 1;
+            else
+                large_event = true(Npeak1,1);
             end
+            participating_channel1 = robust_in_class(burst_id1, solid_event & large_event, max(sum(solid_event & large_event), MIN_SOLID_BURST), ...
+                n_channels, MIN_PARTICIPATION_PHASIC, MIN_PARTICIPATION_TONIC);
+            if sum(solid_event & ~large_event) >= MIN_SOLID_BURST_SMALL
+                participating_channel1 = participating_channel1 | robust_in_class(burst_id1, solid_event & ~large_event, sum(solid_event & ~large_event), ...
+                    n_channels, MIN_PARTICIPATION_PHASIC_SMALL, MIN_PARTICIPATION_TONIC_SMALL);
+            end
+%            participating_channel1 = zeros(n_channels,1);
+%            n_solid = max(NetworkBurstPlayers.nBurst(2), MIN_SOLID_BURST);              % total number of solid primary network burst events
+%            solid_event = [NetworkBurstPlayers.IndivBurst(1:Npeak1).solid]' == 1;       % (revised October 2026) participation is counted only in the solid events, for both rules
+%                                                                                        % (the thresholds are proportions of the solid events; before, weak events also counted)
+%            for ch=1:n_channels                                                         % across all clusters
+%                aux1 = find((burst_id1(:,ch)==1 | burst_id1(:,ch)==3) & solid_event);   % index of solid burst events where the neuron ch fires without bursting: one spike (=1) or several spikes (=3)
+%                                                                                        % (revised October 2026: the events with several spikes but no burst, =3, were not counted)
+%                aux2 = find(burst_id1(:,ch)==2 & solid_event);                          % index of solid burst events where the neuron ch displays individual bursts
+%                if numel(aux2) > numel(aux1)                                            % bursting neuron
+%                    if numel(aux2)>n_solid*MIN_PARTICIPATION_PHASIC                     % enough bursting during network events
+%                        participating_channel1(ch) = 1;                                 % label the neuron as robust participant
+%                    end
+%                else                                                                    % tonic neuron
+%                    if numel(aux1)+numel(aux2)>n_solid*MIN_PARTICIPATION_TONIC           % enough activity during network events (revised October 2026: per-unit rule restored;
+%                                                                                        %  the line used "IndivBurst(k).nChannel.total", where k was left over from a previous loop,
+%                                                                                        %  so every tonic unit got the same decision, based on the last event)
+%                        participating_channel1(ch) = 1;                                 % label the neuron as robust participant
+%                    end
+%                end
+%            end
             NetworkBurstPlayers.Channels(:,1) = find(participating_channel1);           % index of all robustly participating neurons
         else
             NetworkBurstPlayers.nBurst(2) = 0;
@@ -250,7 +280,7 @@ switch option
                 if Npeak2 == 0
                     NetworkBurstPlayers.Secondary.bin = 0;
                 end
-                NetworkBurstPlayers = PopActivityPeak_Integration(participation, spikeTimestamp, BurstDetected, range, bin, threshold, 1, opt_distance, 1, 1, option_plot);  % information about the new population peaks                        
+                NetworkBurstPlayers = PopActivityPeak_Integration(participation, spikeTimestamp, BurstDetected, range, bin, threshold, opt_norm, opt_distance, 1, 1, option_plot);  % information about the new population peaks                        
             end
 
             NetworkBurstPlayers.ChannelsIntegrated(:,1) = find(participation>0);            % index of all participating neurons
@@ -475,5 +505,24 @@ if  option_plot
                 end
            end
    end
+end
+end
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+function robust = robust_in_class(burst_id, events, n_events, n_channels, min_phasic, min_tonic)
+
+% (new, November 2026) units that participate robustly in one class of events (the rule of the screen, applied to "events" only):
+% a unit that bursts in more of these events than it fires without bursting is a bursting unit, robust if it bursts in more than
+% min_phasic*n_events of them; otherwise it is a tonic unit, robust if it fires in more than min_tonic*n_events of them
+
+robust = false(n_channels,1);
+for ch=1:n_channels
+    aux1 = find((burst_id(:,ch)==1 | burst_id(:,ch)==3) & events);          % events where the unit fires without bursting: one spike (=1) or several (=3)
+    aux2 = find(burst_id(:,ch)==2 & events);                                % events where the unit bursts
+    if numel(aux2) > numel(aux1)                                            % bursting unit
+        robust(ch) = numel(aux2) > n_events*min_phasic;
+    else                                                                    % tonic unit
+        robust(ch) = numel(aux1) + numel(aux2) > n_events*min_tonic;
+    end
 end
 end

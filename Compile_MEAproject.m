@@ -390,7 +390,7 @@ file_output_excel = fullfile(folderPath, sprintf('%s_Compiled.xlsx', group));
 % standard deviations, in msec; revised October 2026: column "Clustering_Quality" after "Number_clusters_Netburst")
 units_firing = {'','','','','','sec', 'sec', '#','#','#','Hz','ad','ad','msec','ad','#/window','ad','ad','ad','ad'};    % (revised October 2026: CV and Fano factors)
 units_bursting = {'','','','','','norm', 'norm', '1/min','ad','ad','ad','sec','ad','#/window','sec','ad','1/sec','ad','ad','ad','msec','norm','1/sec','ad','ad','ad','msec','norm','1/sec','ad','ad','ad','msec'};
-units_netbursting = {'','','','','','#','#','','','#','norm','#','norm','norm','norm','ad','1/min','ad','ad','sec','ad','#/window','sec','ad','ad','ad','1/sec','ad','msec','ad','#','msec','msec','msec','msec','ad','Hz','ad','#','norm','#/primary','ad','Hz'};
+units_netbursting = {'','','','','','#','#','','','#','norm','#','norm','norm','norm','ad','1/min','ad','ad','sec','ad','#/window','sec','ad','sec','ad','sec','ad','ad','ad','1/sec','ad','msec','ad','#','msec','msec','msec','msec','ad','Hz','ad','#','norm','#/primary','ad','Hz'};
 
 writetable(Firing, file_output_excel,'Sheet','Firing','Range','A2',"WriteMode",'replacefile')
 writecell(units_firing,file_output_excel,'Sheet','Firing','Range','A1')

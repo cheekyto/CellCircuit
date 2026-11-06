@@ -47,6 +47,10 @@ window = nan(n_events, 2);
 for j=1:n_events
     ini0 = NetworkBurstDetected.IndivBurst(events(j)).start;
     fin0 = NetworkBurstDetected.IndivBurst(events(j)).last;
+    if isfield(NetworkBurstDetected.IndivBurst, 'coreLast') && ~isempty(NetworkBurstDetected.IndivBurst(events(j)).coreLast) ...
+            && ~isnan(NetworkBurstDetected.IndivBurst(events(j)).coreLast)
+        fin0 = NetworkBurstDetected.IndivBurst(events(j)).coreLast;         % (revised November 2026) option 4: the core of the event (as "findChannel_in_Peak")
+    end
     window(j,1) = (ini0 - (fin0-ini0)*K_ONSET)/K_MSEC_SEC;                  % starting point of the event j, in msec
     window(j,2) = (fin0 + (fin0-ini0)*K_ONSET)/K_MSEC_SEC;                  % last point of the event j, in msec
 end

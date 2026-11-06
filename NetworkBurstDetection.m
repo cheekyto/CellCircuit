@@ -20,6 +20,8 @@ function NetworkBurstDetection=NetworkBurstDetection(spikeTrain, BurstDetected, 
 %               =1      Looking for peaks in the population firing rate, with a FIXED bin size (as option 2, but without the search of the optimal bin size)
 %               =2      looking for peaks, combining the regular population firing rate and the normalized population firing; and using a progressive narrowing of the binSize
 %               =3      option 2 + burst family clustering
+%               =4      (new, November 2026) option 3 with the participation signal (fraction of units with a spike in each bin) and
+%                       thresholds from surrogates (each unit circularly shifted): see "PopulationActivityDetection" (opt_norm = 2)
 %   option_plot:
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -51,8 +53,10 @@ FACTOR_FIRST_ROUND = 0.80;                       % (default: 0.8)
 
 MIN_CHAN_SECONDARY = 0.25;                      % minimum number of participating channels/units to accept the secondary events, in terms of the number of participating units in the primary events (default: 0.25)
 MIN_PEAK2_GAP = 1;                              % minimum number of secondary events per gap/window, after a level-1 primary event (default: 1)
-GAP_WITH_PEAK = 0.75;                           % minimum proportion of gaps/windows (level-1 primary events) followed by MIN_PEAK2_GAP secondary events, to accept
-                                                % the secondary events (default: 0.75) (revised October 2026: from "NetworkBurstPlayers", where it never ran)
+GAP_WITH_PEAK = 0.50;                           % minimum proportion of gaps/windows (level-1 primary events) followed by MIN_PEAK2_GAP secondary events, to accept
+                                                % the secondary events (default: 0.50) (revised October 2026: from "NetworkBurstPlayers", where it never ran)
+                                                % (revised November 2026: 0.75 -> 0.60 -> 0.50, user's choices; with 0.75, a recording with secondary events
+                                                %  after 12 of its 16 level-1 events, exactly 75%, lost all of them)
 apply_parameters('NetworkBurstDetection');                                  % (revised October 2026) values of the parameter set of "run_pipeline", if any (see "pipeline_parameters")
 
 switch option_method
@@ -88,6 +92,17 @@ switch option_method
         MIN_ROBUST = 5;                         % minimum number of robustly participating clusters (default: 5)
         apply_parameters('NetworkBurstDetection', 'method3');               % (revised October 2026) values of the parameter set of "run_pipeline", if any (see "pipeline_parameters")
         parameters = struct('method','Normalized Population firing rate','THRESHOLD',THRESHOLD,'BIN_MIN',BIN_MIN,'BIN_MAX',BIN_MAX);
+
+    case 4         % (new, November 2026) Participation signal (fraction of units with a spike in each bin), with thresholds from surrogates,
+                   % dynamic bin size, burst family clustering: the same procedure as method 3, but every detection uses the participation signal
+                   % and the thresholds of "PopulationActivityDetection" (ALPHA_LARGE, PERCENTILE_SMALL, ALPHA_SECONDARY; opt_norm = 2) 
+        BIN_MIN = 0.02;                         % minimum size of the temporal bin, in sec (default: 0.02 sec; in smaller bins, only near-exact synchrony)
+        BIN_MAX = 1.0;                          % maximum size of the temporal bin, in sec (default: 1.0 sec; in larger bins, most units fire in every bin)
+        BIN_DEFAULT = 0.10;                     % default size of the temporal bin, in sec (default: 0.10 sec)
+        MIN_ROBUST = 5;                         % minimum number of robustly participating clusters (default: 5, as in method 3)
+        apply_parameters('NetworkBurstDetection', 'method4');               % values of the parameter set of "run_pipeline", if any (see "pipeline_parameters")
+        THRESHOLD = nan;                        % (not used: the thresholds come from the surrogates)
+        parameters = struct('method','Participation signal, surrogate thresholds','BIN_MIN',BIN_MIN,'BIN_MAX',BIN_MAX);
 end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -98,6 +113,12 @@ option_clustering = 0;
 if option_method==3
     option_method=2;
     option_clustering=1;
+end
+signal = 1;                                                                 % (new, November 2026) population signal ("opt_norm" of the detection functions):
+if option_method==4                                                         % =1, normalized firing rate (methods 1-3); =2, participation with surrogate thresholds
+    option_method=2;
+    option_clustering=1;
+    signal = 2;
 end
 fixed_bin = false;                                                          % (revised October 2026) method 1 = method 2 with the bin size fixed to BIN
 if option_method==1
@@ -118,29 +139,33 @@ switch option_method
         flag1 = 0;
         units = ones(n_clusters,1);                                         % ALL clusters
         % Preliminary screen using all channels (identify peaks and participating neurons); look for population peaks
-        PopulationActivityDetected_beta = DynamicPopActDetect(units, spikeTrain, BurstDetected, range, BIN_MIN, BIN_MAX, nan, THRESHOLD*FACTOR_FIRST_ROUND, opt_distance, 0, 1, 0); 
+        PopulationActivityDetected_beta = DynamicPopActDetect(units, spikeTrain, BurstDetected, range, BIN_MIN, BIN_MAX, nan, THRESHOLD*FACTOR_FIRST_ROUND, opt_distance, 0, signal, 0); 
         if isnan(PopulationActivityDetected_beta.bin)                       % if the optimal bin size could not been found
-            PopulationActivityDetected_beta = PopActivityPeak_Integration(units,spikeTrain, BurstDetected, range, BIN_DEFAULT, THRESHOLD*FACTOR_FIRST_ROUND, 1, opt_distance, 0, 1, option_plot);
+            PopulationActivityDetected_beta = PopActivityPeak_Integration(units,spikeTrain, BurstDetected, range, BIN_DEFAULT, THRESHOLD*FACTOR_FIRST_ROUND, signal, opt_distance, 0, 1, option_plot);
                                                                             % (revised October 2026) plots only if option_plot (before, always: opt_plot = 1)
             PopulationActivityDetected_beta.bin = BIN_DEFAULT;              % use the default bin size
             flag1 = 1;                                                      % flag1 == 1, could not find optimal bin size; flag1 == 0, optimal bin size was successfully identified    
             fprintf("\n After the first search round,  the optimal bin size was NOT identified (step 1 out of 4, %f min) \n", toc(t0)/60);        
         end
         t1=tic;
-        flag_delta = 0;                                                     % (revised October 2026) same as flag1, for the non-normalized signal
-        PopulationActivityDetected_delta = DynamicPopActDetect(units, spikeTrain, BurstDetected, range, BIN_MIN, BIN_MAX, nan, THRESHOLD*FACTOR_FIRST_ROUND, opt_distance, 0, 0, 0); 
-        if isnan(PopulationActivityDetected_delta.bin)                       % if the optimal bin size could not been found
-            PopulationActivityDetected_delta = PopActivityPeak_Integration(units,spikeTrain, BurstDetected, range, BIN_DEFAULT, THRESHOLD*FACTOR_FIRST_ROUND, 0, opt_distance, 0, 1, 0);
-            PopulationActivityDetected_delta.bin = BIN_DEFAULT;              % use the default bin size
-            flag_delta = 1;                                                 % the optimal bin size was NOT identified with the non-normalized signal
-        end
-        if PopulationActivityDetected_delta.nBurst > PopulationActivityDetected_beta.nBurst
-            PopulationActivityDetected_beta = PopulationActivityDetected_delta;
-            flag1 = flag_delta;                                             % (revised October 2026) flag1 describes the result that is kept: =1 if it used the default bin size
-                                                                            % (before, it still described the normalized signal after being replaced by the non-normalized one)
-            fprintf("\n The non-normalized signal deliverd more primary events than the normalized signal (step 2 out of 4, %f min) \n", toc(t1)/60);
-        else
-            fprintf("\n The normalized signal delivered more primary events than the non-normalized signal (step 2 out of 4, %f min) \n", toc(t1)/60);
+        if signal == 1                                                      % (new, November 2026: only methods 1-3) the non-normalized signal is also tested
+            flag_delta = 0;                                                     % (revised October 2026) same as flag1, for the non-normalized signal
+            PopulationActivityDetected_delta = DynamicPopActDetect(units, spikeTrain, BurstDetected, range, BIN_MIN, BIN_MAX, nan, THRESHOLD*FACTOR_FIRST_ROUND, opt_distance, 0, 0, 0); 
+            if isnan(PopulationActivityDetected_delta.bin)                       % if the optimal bin size could not been found
+                PopulationActivityDetected_delta = PopActivityPeak_Integration(units,spikeTrain, BurstDetected, range, BIN_DEFAULT, THRESHOLD*FACTOR_FIRST_ROUND, 0, opt_distance, 0, 1, 0);
+                PopulationActivityDetected_delta.bin = BIN_DEFAULT;              % use the default bin size
+                flag_delta = 1;                                                 % the optimal bin size was NOT identified with the non-normalized signal
+            end
+            if PopulationActivityDetected_delta.nBurst > PopulationActivityDetected_beta.nBurst
+                PopulationActivityDetected_beta = PopulationActivityDetected_delta;
+                flag1 = flag_delta;                                             % (revised October 2026) flag1 describes the result that is kept: =1 if it used the default bin size
+                                                                                % (before, it still described the normalized signal after being replaced by the non-normalized one)
+                fprintf("\n The non-normalized signal deliverd more primary events than the normalized signal (step 2 out of 4, %f min) \n", toc(t1)/60);
+            else
+                fprintf("\n The normalized signal delivered more primary events than the non-normalized signal (step 2 out of 4, %f min) \n", toc(t1)/60);
+            end
+        else                                                                % method 4: participation signal only
+            fprintf("\n Participation signal with surrogate thresholds (step 2 out of 4, %f min) \n", toc(t1)/60);
         end
         t2 = tic;
         NetworkBurstPlayer_beta = NetworkBurstPlayers(spikeTrain, range, PopulationActivityDetected_beta, BurstDetected, 1, PopulationActivityDetected_beta.bin , THRESHOLD*FACTOR_FIRST_ROUND, opt_distance, 0);  % robust vs weak
@@ -148,9 +173,9 @@ switch option_method
         % Refined/final analysis; look for population peaks using only the robustly participating clusters
         % NOTE (October 2026): the refined round ("alpha"), the final round and the final re-detection with the participating units (inside 
         % "NetworkBurstPlayers", option 2) always use the NORMALIZED population signal (opt_norm = 1), whichever signal (normalized "beta" or 
-        % non-normalized "delta") was kept in the preliminary round above. This is intended. To use the non-normalized signal instead, change 
-        % opt_norm from 1 to 0 in: "DynamicPopActDetect" (11th input) and "PopActivityPeak_Integration" (7th input) below, and in 
-        % "NetworkBurstPlayers" (the call "PopActivityPeak_Integration(participation, ...)" of option 2)
+        % non-normalized "delta") was kept in the preliminary round above. This is intended. To use the non-normalized signal instead, set 
+        % "signal" to 0 for those calls (the 11th input of "DynamicPopActDetect", the 7th input of "PopActivityPeak_Integration", and the last 
+        % input of "NetworkBurstPlayers"). (November 2026) Method 4 uses the participation signal (signal = 2) in every round
         flag2 = 0;
         units = zeros(n_clusters,1);
         participants = union(NetworkBurstPlayer_beta.Channels, NetworkBurstPlayer_beta.Secondary.Channels);
@@ -167,10 +192,10 @@ switch option_method
             if fixed_bin                                                    % (revised October 2026) method 1: no refined search, the bin size is fixed (BIN)
                 bin_center = nan;
             end
-            PopulationActivityDetected_alpha = DynamicPopActDetect(units, spikeTrain, BurstDetected, range, BIN_MIN, BIN_MAX, bin_center, THRESHOLD, opt_distance, 0, 1, 0); 
+            PopulationActivityDetected_alpha = DynamicPopActDetect(units, spikeTrain, BurstDetected, range, BIN_MIN, BIN_MAX, bin_center, THRESHOLD, opt_distance, 0, signal, 0); 
 
             if isnan(PopulationActivityDetected_alpha.bin)                  % if the optimal bin size could not been found
-                PopulationActivityDetected_alpha = PopActivityPeak_Integration(units,spikeTrain, BurstDetected, range, BIN_DEFAULT, THRESHOLD, 1, opt_distance, 0, 1, 0);
+                PopulationActivityDetected_alpha = PopActivityPeak_Integration(units,spikeTrain, BurstDetected, range, BIN_DEFAULT, THRESHOLD, signal, opt_distance, 0, 1, 0);
                 PopulationActivityDetected_alpha.bin = BIN_DEFAULT;         % use the default bin size
                 flag2 = 1;                                                  % flag2 == 1, the optimal bin size could not been identified (when using only the robustly participating clusters)
                 bin_final = (PopulationActivityDetected_beta.bin + PopulationActivityDetected_alpha.bin)/2;     % compromised solution 
@@ -179,12 +204,15 @@ switch option_method
 %                    bin_final = (PopulationActivityDetected_beta.bin + PopulationActivityDetected_alpha.bin*4)/5;   % weighted average                    
                     bin_final = PopulationActivityDetected_alpha.bin;       % (revised October 2026: ";" added, it printed the value)
                 else                                                            % if the optimal bin size was identified
-                    bin_final = (PopulationActivityDetected_beta.bin + PopulationActivityDetected_alpha.bin*2)/3;   % weighted average
+%                    bin_final = (PopulationActivityDetected_beta.bin + PopulationActivityDetected_alpha.bin*2)/3;   % weighted average
+                    bin_final = PopulationActivityDetected_alpha.bin;       % (revised November 2026, with the plateau selection of "DynamicPopActDetect"; user's
+                                                                            %  choice) the centre of the plateau of the refined search; before, a weighted average
+                                                                            %  of the two rounds, which could fall outside both plateaus
                 end
             end
             fprintf("\n About to run the final round of Peak detection (step 3 out of 4, %f min) ... \n ", toc(t2)/60);
             t3=tic;
-            PopulationActivityDetected = DynamicPopActDetect(units, spikeTrain, BurstDetected, range, bin_final, bin_final, nan, THRESHOLD, opt_distance, 1, 1, option_plot); % final round of peak detection, using "bin_final"          
+            PopulationActivityDetected = DynamicPopActDetect(units, spikeTrain, BurstDetected, range, bin_final, bin_final, nan, THRESHOLD, opt_distance, 1, signal, option_plot); % final round of peak detection, using "bin_final"          
                                                                             % (revised October 2026) plots only if option_plot (before, always: opt_plot = 1, which also ran
                                                                             %  up to 3 extra detections, only to plot them, in "DynamicPopActDetect")
         end
@@ -193,7 +221,7 @@ switch option_method
         fprintf("   We are starting with %g primary events (%g level1) and %g secondary events \n",PopulationActivityDetected.nBurst, PopulationActivityDetected.nBurst_level1, PopulationActivityDetected.Secondary.nBurst);
         t4=tic;
         % Statistical assessment and final "PopActivityPeak_Integration" with the final list of participating units
-        NetworkBurstPlayer = NetworkBurstPlayers(spikeTrain, range, PopulationActivityDetected, BurstDetected, 2, bin_final, THRESHOLD, opt_distance, option_plot); % statistical assessment 
+        NetworkBurstPlayer = NetworkBurstPlayers(spikeTrain, range, PopulationActivityDetected, BurstDetected, 2, bin_final, THRESHOLD, opt_distance, option_plot, signal); % statistical assessment 
         fprintf("   After the statistical assessment, we have %g primary events (%g level1) and %g secondary events \n",NetworkBurstPlayer.nBurst, NetworkBurstPlayer.nBurst_level1,NetworkBurstPlayer.Secondary.nBurst);
 
         % Final Quality Control on primary events
@@ -242,7 +270,16 @@ switch option_method
             end
             for k=NetworkBurstPlayer.Secondary.nBurst:-1:1                  % across all secondary events  
                 parent = NetworkBurstPlayer.Secondary.IndivBurst(k).parent;
-                if NetworkBurstPlayer.IndivBurst(idx_parent(parent)).last < NetworkBurstPlayer.Secondary.IndivBurst(k).peak     % the secondary peak is after the end of its parent (level-1) primary event
+                % (revised November 2026; user's choice) a secondary event separated from its large event at the bin of the secondary search
+                % ("Optimal_secondaryPeak": the signal falls between the two peaks) is not compared with the end of the large event, which is
+                % measured at the bin of the large events, where the large event and its reverberations blur into one mountain
+                ev2 = NetworkBurstPlayer.Secondary.IndivBurst(k);
+                if isfield(ev2, 'dropOwn') && ~isempty(ev2.dropOwn) && ~isnan(ev2.dropOwn)
+                    after_parent = true;
+                else
+                    after_parent = NetworkBurstPlayer.IndivBurst(idx_parent(parent)).last < ev2.peak;   % the secondary peak is after the end of its parent (level-1) primary event
+                end
+                if after_parent
                     contador = 0;
                     for i=1:n_participating2                                    % across all participating units
                         ch = NetworkBurstPlayer.Secondary.Channels(i,1);

@@ -45,6 +45,15 @@ CHANGE_THRESHOLD = 0.40;                        % threshold for the metric: chan
 OPTION_LEVEL = 1;                               % =1, just analyze the level1 peaks to determine the optimal bin size and the secondary peaks
                                                 % =0, analyze all peaks (level0 and level1) to determine the optimal bin size
 MAX_IT = 100;
+% (new, November 2026; user's choices) selection of the bin size: the centre of the widest range of bin sizes over which the level-1 events
+% do not change (a plateau), so that the result depends as little as possible on the bin size. Before, the bin size with a small change of the
+% number of level-1 events and a low CV of their intervals: the ties (several bin sizes with the same events) were broken towards the finest
+% bin size, at the edge of the plateau, and small changes of the data moved the choice
+BIN_SELECTION = 'plateau';                      % 'plateau' (default) or 'legacy' (the rule before November 2026)
+AGREEMENT = [0.90; 0.80; 0.75];                 % minimum agreement of the level-1 events between neighbouring bin sizes (matched events / all the
+                                                % different events); graded: if there is no plateau at the first level, the next one is tried
+MIN_EVENTS = 2;                                 % minimum number of level-1 events at each bin size of a plateau
+MATCH_MIN = 0.10;                               % two events match if their peaks are within the larger of the two bin sizes, and at least MATCH_MIN, in sec
 apply_parameters('DynamicPopActDetect');                                    % (revised October 2026) values of the parameter set of "run_pipeline", if any (see "pipeline_parameters")
 opt_test = 1;
 
@@ -125,6 +134,55 @@ end
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%     Identify the ideal bin size
 
+bin_best = nan;
+if strcmp(BIN_SELECTION, 'plateau')
+    % (new, November 2026) agreement of the level-1 events between neighbouring bin sizes; a plateau is a run of neighbouring bin sizes
+    % (within bin_min and bin_max) whose events agree; the widest one (in log scale; then the most stable, then the one with more events)
+    % gives the bin size at its geometric centre
+    pk = cell(n_bin,1);
+    for k=1:n_bin
+        pk{k} = zeros(0,1);
+        if PopulationActivityDetected{k}.nBurst > 0 && isfield(PopulationActivityDetected{k}.IndivBurst, 'level')
+            lv = [PopulationActivityDetected{k}.IndivBurst.level];
+            pk{k} = sort([PopulationActivityDetected{k}.IndivBurst(lv == 1).peak])';
+        end
+    end
+    agree = zeros(max(n_bin-1,0),1);
+    for k=1:n_bin-1
+        agree(k) = event_agreement(pk{k}, pk{k+1}, max([bin_size(k), bin_size(k+1), MATCH_MIN]));
+    end
+    inside = bin_size(:) >= bin_min*(1 - 1e-9) & bin_size(:) <= bin_max*(1 + 1e-9);   % only the bin sizes within the range of the method
+    best = [];
+    for level = AGREEMENT(:)'                                               % graded agreement: 90%, then 80%, then 75%
+        good = agree >= level & n_burst(1:end-1) >= MIN_EVENTS & n_burst(2:end) >= MIN_EVENTS & inside(1:end-1) & inside(2:end);
+        best = [];  best_score = [-inf -inf -inf];
+        k = 1;
+        while k <= n_bin-1
+            if good(k)
+                j = k;
+                while j+1 <= n_bin-1 && good(j+1)
+                    j = j + 1;
+                end
+                score = [log(bin_size(j+1)/bin_size(k)), mean(agree(k:j)), mean(n_burst(k:j+1))];
+                if isempty(best) || compare_scores(score, best_score)
+                    best = [k, j+1];    best_score = score;
+                end
+                k = j + 1;
+            else
+                k = k + 1;
+            end
+        end
+        if ~isempty(best)
+            break
+        end
+    end
+    if ~isempty(best)
+        bin_best = sqrt(bin_size(best(1))*bin_size(best(2)));               % geometric centre of the plateau
+        [~, idx_best] = min(abs(log(bin_size) - log(bin_best)));            % (closest tested bin size, for the plots)
+    else
+        idx_best = nan;                                                     % no plateau: the optimal bin size is not identified
+    end
+else                                                                        % 'legacy': the rule before November 2026
 [~, sort_idx] = sort(abs(change_Nburst), 'ascend');
 % (revised October 2026) the shortlist of low CV is built only with the bin sizes that have a CV (at least 2 level-1 events); before, 
 % "sort(cv_ibi)" put the NaN values at the end and the first N_SHORTLIST were taken, so a bin size without CV could enter the shortlist 
@@ -144,10 +202,15 @@ end
 if n_bin==1
     idx_best=1;
 end
+if ~isnan(idx_best), bin_best = bin_size(idx_best); end
+end
+if n_bin==1                 % (a single bin size, e.g., the final round of "NetworkBurstDetection")
+    idx_best = 1;   bin_best = bin_size(1);
+end
 if ~isnan(idx_best)         % the optimal bin size was identified, then look for secondary peaks
 %    opt_plot=1;
-    DynamicPopActDetect = PopActivityPeak_Integration(units, spikeTimestamp, BurstDetected, range, bin_size(idx_best), threshold, opt_norm, opt_distance, opt_binopti, OPTION_LEVEL, opt_plot);    
-    DynamicPopActDetect.bin = bin_size(idx_best);
+    DynamicPopActDetect = PopActivityPeak_Integration(units, spikeTimestamp, BurstDetected, range, bin_best, threshold, opt_norm, opt_distance, opt_binopti, OPTION_LEVEL, opt_plot);
+    DynamicPopActDetect.bin = bin_best;
 else
     DynamicPopActDetect.nBurst = 0;
     DynamicPopActDetect.bin = nan;
@@ -194,4 +257,37 @@ if opt_test && opt_plot
     xlabel('Bin size (sec)');       ylabel('CV of IBI')
 end
 
+end
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+function a = event_agreement(p, q, tol)
+
+% (new, November 2026) agreement between two lists of peak times: events matched one to one (each to the closest free one, within tol),
+% divided by all the different events (matched / (numel(p) + numel(q) - matched)); 1 if both lists are empty
+
+if isempty(p) && isempty(q)
+    a = 1;  return
+end
+used = false(numel(q),1);   m = 0;
+for i=1:numel(p)
+    [d, j] = min(abs(q - p(i)) + 1e9*used);
+    if ~isempty(d) && d <= tol
+        used(j) = true;     m = m + 1;
+    end
+end
+a = m/(numel(p) + numel(q) - m);
+end
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+function better = compare_scores(s, b)
+
+% (new, November 2026) is the plateau with score s better than the one with score b? Wider (log scale), then more stable (mean agreement),
+% then more events
+
+better = false;
+if s(1) > b(1) + 1e-9, better = true; return, end
+if abs(s(1) - b(1)) <= 1e-9
+    if s(2) > b(2) + 1e-12, better = true; return, end
+    if abs(s(2) - b(2)) <= 1e-12 && s(3) > b(3), better = true; end
+end
 end

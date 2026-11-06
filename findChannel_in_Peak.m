@@ -66,8 +66,9 @@ timeStamp = cell(Npeak, n_channels);                                        % ti
 
 ini_Nburst = zeros(Npeak,1);    fin_Nburst = zeros(Npeak,1);                % (revised October 2026) windows of all events, calculated once (before, once per cluster)
 for k=1:Npeak                                                               % across all events 
-    ini_Nburst(k) = PopActivity.IndivBurst(k).start/K_MSEC_SEC;             % starting point of the event k, in msec
-    fin_Nburst(k) = PopActivity.IndivBurst(k).last/K_MSEC_SEC;              % last point of the event k, in msec
+    [ini0, fin0] = test_window(PopActivity.IndivBurst(k));                  % (revised November 2026) the whole event, or its core (option 4)
+    ini_Nburst(k) = ini0/K_MSEC_SEC;                                        % starting point of the event k, in msec
+    fin_Nburst(k) = fin0/K_MSEC_SEC;                                        % last point of the event k, in msec
     time_added = (fin_Nburst(k)-ini_Nburst(k))*SAFE_K;                      % extra time added on both ends
     ini_Nburst(k) = ini_Nburst(k) - time_added;                             % just in case, add more data points to the left
     fin_Nburst(k) = fin_Nburst(k) + time_added;                             % just in case, add more data points to the right
@@ -211,8 +212,7 @@ end
 window = nan(Npeak,2);                                                      % temporal window for each burst event
 window2 = nan(Npeak,2);                                                     % auxiliary temporal window for each burst event        
 for k=1:Npeak                                                               % across all network bursts
-    ini0 = PopActivity.IndivBurst(k).start;
-    fin0 = PopActivity.IndivBurst(k).last;
+    [ini0, fin0] = test_window(PopActivity.IndivBurst(k));                  % (revised November 2026) the whole event, or its core (option 4)
     window(k,1) = (ini0 - (fin0-ini0)*K_ONSET)/K_MSEC_SEC;                  % starting point of the burst k, in msec
     window(k,2) = (fin0 + (fin0-ini0)*K_ONSET)/K_MSEC_SEC;                  % last point of the burst k, in msec
     window2(k,1) = (ini0 - (fin0-ini0)*SAFE_K)/K_MSEC_SEC;                  % starting point of the burst k, in msec
@@ -320,4 +320,19 @@ Ch_in_Peak = PopActivity;
 Ch_in_Peak.participation = participation;
 aux_burst = [];     burst_id = [];      meaningful_activity = [];
 end
+end
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+function [ini0, fin0] = test_window(event)
+
+% window to test the participation of the units in an event, in sec: the whole event, or its core when the detection provides it
+% (option 4 of "NetworkBurstDetection": from the start to the peak, plus the same time after the peak, so that the persistent firing after
+% the large events -part of their duration- does not dilute the activity of the units during the event; user's choice, November 2026)
+
+ini0 = event.start;
+fin0 = event.last;
+if isfield(event, 'coreLast') && ~isempty(event.coreLast) && ~isnan(event.coreLast)
+    fin0 = event.coreLast;
+end
+
 end

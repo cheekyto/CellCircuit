@@ -22,12 +22,13 @@ function run_pipeline(recordings, varargin)
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%   INPUTS   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-%   recordings:     path of the recordings table (.csv or .xlsx; see "recordings_template.csv"), one row per recording, with the columns
+%   recordings:             path of the recordings table (.csv or .xlsx; see "recordings_template.csv"), one row per recording, with the columns
 %       folder              folder of the recording (absolute, or relative to the folder of the table)
 %       file_name           common name of the files of the recording (e.g., "recording_01"); for a 3Brain recording,
 %                           the name of its files without the suffix (e.g., "XXX_3Brain")
 %       group               group of the recording: the analyzed files of a group are collected in the folder <project>/<group>,
 %                           and compiled together by "Compile_MEAproject"
+%       
 %       (optional columns)
 %       to_discard          clusters discarded by "QualityControl_Manual" (e.g., "3 17 25"; the indexes are defined after eliminating
 %                           the silent clusters); empty: none
@@ -128,8 +129,8 @@ if ~isfile(table_file)
     error("The recordings table '%s' was not found", table_file);
 end
 table_dir = fileparts(table_file);
-recs = read_recordings(table_file, table_dir);
-recs = select_rows(recs, opts.rows);
+recs = read_recordings(table_file, table_dir);                              % local function
+recs = select_rows(recs, opts.rows);                                        % local function
 if isempty(recs)
     error("No recording to run (check the column 'include' and the option 'rows')");
 end
@@ -188,7 +189,7 @@ for r=1:n_rec
     if ~isfolder(rec.folder)
         msg = sprintf("the folder %s does not exist", rec.folder);
         fprintf("      ERROR: %s\n", msg);
-        errors(end+1) = sprintf("[%d/%d] %s: %s", r, n_rec, rec.file_name, msg);   %#ok<AGROW>
+        errors(end+1) = sprintf("[%d/%d] %s: %s", r, n_rec, rec.file_name, msg);   
         ok_rec(r) = false;
         continue
     end
@@ -203,7 +204,7 @@ for r=1:n_rec
         end
     catch ME
         fprintf("      ERROR: %s\n", ME.message);
-        errors(end+1) = sprintf("[%d/%d] %s: %s", r, n_rec, rec.file_name, ME.message);   %#ok<AGROW>
+        errors(end+1) = sprintf("[%d/%d] %s: %s", r, n_rec, rec.file_name, ME.message);  
         ok_rec(r) = false;
         continue
     end
@@ -227,7 +228,7 @@ for r=1:n_rec
         else
             fprintf("%s\n", error_text(ME, elapsed, verbose, st, file_log));
             record.history(end).status = "error in " + st + ": " + first_line(ME.message);
-            errors(end+1) = sprintf("[%d/%d] %s, %s: %s", r, n_rec, rec.file_name, st, first_line(ME.message));   %#ok<AGROW>
+            errors(end+1) = sprintf("[%d/%d] %s, %s: %s", r, n_rec, rec.file_name, st, first_line(ME.message));   
             ok_rec(r) = false;
         end
         save_record(file_params, record);
