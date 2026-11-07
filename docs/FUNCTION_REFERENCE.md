@@ -421,6 +421,18 @@ OUTPUT: SAVE the following tables in the file sprintf('%s/%s\_Compiled.mat', fol
 
  	It also saves the tables in an Excel file with the same name (the first row of each sheet has the units), and the file "group\_Grouped&Compiled.xlsx" with the rows grouped by treatment
 
+ 	UNITS USED BY THE NETWORK-BURST METRICS (added November 2026). Sheets "Network Bursting Pooled" (NETbursting0), "Network Bursting Primary" (NETbursting1) and "Network Bursting ALL clusters" (NETbursting2):
+
+ 	. Participating units: in NETbursting0, the units participating in the primary events (NetworkBurstDetected.Channels; the units that take part only in secondary events are not included); in NETbursting1 and NETbursting2, the units of the family ("familyParticipants": the participating units that fire in more than 20% of the family's events and in at least 2 of them). Used by Number\_NETburst\_Neurons, Number\_Spikes\_NETburst, NumberNorm\_Spikes\_NETburst (divided by all the spikes of the same units), Participation\_NETburst and its CV (fraction of these units active in each event), Amplitude\_NETburst and its CV (inter-spike intervals within the events), Distance\_NETburst and its CV, and the metrics of "NetworkBurstStructure": tempStructNeuron\_NETburst, Onset\_NETburst, Peak\_NETburst and their standard deviations, Correlation\_NETburst, PeakFire\_NETburst and PeakFireNorm\_NETburst
+
+ 	. All the recorded units, only as the denominator: NumberNorm\_NETburst\_Neurons (participating units / all the units), NumberNorm\_SpikesTotal\_NETburst (spikes of the participating units within the events / all the spikes of all the units), NumberNorm\_SecondaryBurst\_Neurons (units participating in the secondary events / all the units)
+
+ 	. Timing of the events, from the network-burst detection, whose population signal uses the units participating in the primary or the secondary events (all the families): Duration\_NETburst, Duration20\_NETburst, Duration50\_NETburst and their CVs, Tail\_NETburst and its CV, and, from the times of the peaks, Rate\_NETburst, RateCV\_NETburst, FFibi\_CV2\_NETburst, FFibi\_VarMean\_NETburst, FFcount\_NETburst and MeanCount\_NETburst. In NETbursting1 and NETbursting2 they are computed over the events of the family (the intervals are between consecutive events of the family), but each event was timed on the signal of all the participating units
+
+ 	. Secondary events (the same in every row: they are not split by family): Number\_SecondaryBurst\_Neurons and Amplitude\_SecondaryBurst use the units participating in the secondary events (NetworkBurstDetected.Secondary.Channels)
+
+ 	. No units (numbers of events): Number\_NETburst\_Events (in NETbursting1 and NETbursting2, the events of the family), Number\_clusters\_Netburst, Clustering\_Quality, NumberNorm\_SecondaryBurst, ParentNorm\_SecondaryBurst
+
 
 
 

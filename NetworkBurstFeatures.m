@@ -58,7 +58,7 @@ function NetworkBurstFeatures = NetworkBurstFeatures(NetworkBurstDetected, spike
 % NetworkBurstFeatures.distance.mean                   % distance of the network burst to the individual spike trains, in msec (peak to midpoint) 
 % NetworkBurstFeatures.distance.cv
 % NetworkBurstFeatures.delay.mean                      % distance of the burst start to the first spike of each spike train, in msec 
-% NetworkBurstFeatures.neuronsAct.mean                 % mean number of active neurons within burst normalized to the total number of globally participating neurons
+% NetworkBurstFeatures.neuronsAct.mean                 % mean proportion of the units in "units_participant" (all the participating units, or those of a family) active in each event (comment revised November 2026)
 % NetworkBurstFeatures.neuronsAct.cv                   % coefficient of variation of # active neurons
 % NetworkBurstFeatures.indivMetric(i).nSpikes          % total number of spikes in burst i, per channel
 % NetworkBurstFeatures.indivMetric(i).duration         % duration of the burst i, in sec
@@ -223,7 +223,7 @@ if ~isnan(nBurstTotal) && nBurstTotal>0 && nBurst>0                         % th
     NetworkBurstFeatures.nSpikes.mean = mean(spikes_burst,'omitnan');           % total number of spikes per network burst, per neuron 
     NetworkBurstFeatures.nSpikes.norm = mean(spikes_burst,'omitnan')*nBurst/(spikes_neuron_netBursting/nPartNeu);  % total number of spikes in network burst, normalized to the total number of spikes in bursting participating neurons 
     NetworkBurstFeatures.nSpikes.normTotal = mean(spikes_burst,'omitnan')*nBurst*nPartNeu/spikes_neuron_total;     % total number of spikes in network burst, normalized to the total number of spikes across all channels
-    NetworkBurstFeatures.neuronsAct.mean = mean(neurons_burst,'omitnan');       % number of active neurons within burst normalized to the total number of globally participating neurons
+    NetworkBurstFeatures.neuronsAct.mean = mean(neurons_burst,'omitnan');       % proportion of the units in "units_participant" active in each event (comment revised November 2026)
     NetworkBurstFeatures.neuronsAct.cv = std(neurons_burst,'omitnan')/mean(neurons_burst,'omitnan');      
     NetworkBurstFeatures.distance.mean = mean(distance_burst,'omitnan');        % distance of the network burst to the individual spike trains, in msec (peak to midpoint)
     NetworkBurstFeatures.distance.cv = std(distance_burst,'omitnan')/mean(distance_burst,'omitnan');      
