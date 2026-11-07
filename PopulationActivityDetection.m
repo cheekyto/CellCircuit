@@ -66,6 +66,9 @@ ACTIVITY_THRESHOLD = 0.03;                      % minimum level of spiking frequ
 PEAK_THRESHOLD = 20;                            % threshold to run the second round of searching, relative to median firing rate (default: 20)
 TAIL_FACTOR = 3;                                % (new, November 2026) the tail of a large event lasts until the signal returns to its median (baseline),
                                                 % and at most TAIL_FACTOR times the duration of the event after its end (default: 3)
+NOISE_ROBUST = 1;                               % (new, November 2026) noise of the second round (small events): 1 = robust, 1.4826 x the median absolute
+                                                % deviation of the signal without the large events and their tails; 0 = standard deviation (before)
+NOISE_FLOOR_SD = 0.25;                          % (new, November 2026) floor of the robust noise, as a proportion of the standard deviation (default: 0.25)
 
 % (new, November 2026) option 4 of "NetworkBurstDetection" (opt_norm = 2): participation signal with a surrogate threshold
 N_SURROGATE = 1000;                             % number of surrogates; each unit is circularly shifted by an independent random offset (default: 1000)
@@ -115,6 +118,7 @@ spikes = mean(spikes_indiv,2, 'omitnan');                                       
 PopulationActivityDetection.spikesBin = spikes;                                 % mean Population spike count (normalized or nominal, or participation, depending on "opt_norm"
 PopulationActivityDetection.time = time_binned;                                 % array with the midpoint of the bins, in sec
 PopulationActivityDetection.bin = bin;                                          % bin size
+PopulationActivityDetection.closedZones = zeros(0,3);                          % (new, November 2026) [start end tail_end] of each large event (see below), in sec
 
 if opt_secondary
     sm_factor = SMOOTH_FACTOR(1);
@@ -158,6 +162,7 @@ if ~opt_secondary && ~use_surrogate
     end
 end
 
+zones_sm = cell(max(n_smoothing,1),1);                                         % (new, November 2026) closed zones of each smoothing
 for sm=1:n_smoothing
 
 smoothWindow = sm_factor(sm) + smoothWindowAdd;
@@ -196,6 +201,11 @@ if contador>0
     
     tamanio = mean(pks)/median(smoothedSpikes);
     smoothedSpikes_cropped = smoothedSpikes;
+    if ~opt_secondary                                                       % (new, November 2026) closed zone of each large event: from its start to the
+        tail_end = tail_limits(smoothedSpikes, start_Nburst, end_Nburst, TAIL_FACTOR);   % end of its tail (see below); also used by the recruitment
+        tb = time_binned(:);                                                %  check of "NetworkBurstDetection" (small events: outside; secondary: the tails)
+        zones_sm{sm} = [tb(start_Nburst(:)), tb(end_Nburst(:)), tb(tail_end(:))];
+    end
 
     if tamanio > PEAK_THRESHOLD && ~opt_secondary
         % (revised November 2026; user's choices) the tail of each large event lasts until the signal returns to its baseline (the median
@@ -203,13 +213,22 @@ if contador>0
         % to measure the noise (before, the event plus the same duration again, which on some recordings left most of the tail in) and, below,
         % it is closed to the small events (before, they were searched in the whole signal, so the bumps on the tails, where the signal is
         % higher and noisier than the baseline that sets the threshold, became small events)
-        tail_end = tail_limits(smoothedSpikes, start_Nburst, end_Nburst, TAIL_FACTOR);
-        for j=1:contador
+        for j=1:contador                                                    % (tail_end: computed above)
             smoothedSpikes_cropped(start_Nburst(j):tail_end(j)) = nan;
         end
 %        threshold0 = max(threshold0, MIN_THRESHOLD);
         threshold0 = max(threshold, MIN_THRESHOLD);
-        threshold_peak_low = std(smoothedSpikes_cropped,'omitnan')*threshold0;
+        % (revised November 2026; user's choices) robust noise: the standard deviation of the signal without the large events was inflated by
+        % the small (moderate) events themselves, so on recordings with many of them the threshold rose above them and most were missed. The
+        % median absolute deviation ignores them; its floor (NOISE_FLOOR_SD x the standard deviation, i.e. the same floor on the threshold)
+        % keeps the threshold from collapsing on very regular signals. The false small events that a lower threshold lets in are removed by
+        % the recruitment check of "NetworkBurstDetection"
+        yc = smoothedSpikes_cropped(~isnan(smoothedSpikes_cropped));
+        noise = std(yc);
+        if NOISE_ROBUST
+            noise = max(1.4826*median(abs(yc - median(yc))), NOISE_FLOOR_SD*noise);
+        end
+        threshold_peak_low = noise*threshold0;
         threshold_second = min(threshold_peak_low, threshold_peak);
 
         %fprintf("Running 2nd round of Population Peak Detection with an absolute threshold reduced by a factor of %f \n", threshold_peak/threshold_second)
@@ -288,6 +307,9 @@ end % end for the for loop across smoothing factors
 %%%     Look for the best smoothing factor
 
 [n_peaks_final, sm_optimal] = max(n_peaks_smooth);
+if ~isempty(zones_sm{sm_optimal})
+    PopulationActivityDetection.closedZones = zones_sm{sm_optimal};             % (new, November 2026) closed zones of the large events, in sec
+end
 PopulationActivityDetection.smoothed_spikesBin = smoothed_spikesBin{sm_optimal};                % smoothed mean Population spike count
 
 if n_peaks_final>0

@@ -33,6 +33,7 @@ function Optimal_secondaryPeak = Optimal_secondaryPeak(units, spikeTimestamp, ra
 %                                               median of the gap (1 = the signal falls to the median)
 % Optimal_secondaryPeak.IndivBurst(j).dropZ:    (option 4) the same drop, in units of its sampling noise (binomial noise of the participation)
 % Optimal_secondaryPeak.IndivBurst(j).searchStart: start of the search in the gap of peak j, in sec
+% Optimal_secondaryPeak.searchWindows(k,:):    (new, November 2026) [start end] of the search in the gap k, in sec
 % Optimal_secondaryPeak.bin
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -72,8 +73,9 @@ START_LEVEL_FINE = 0.50;                        % the search starts where the la
 SEPARATION_LEVEL = 0.50;                        % a secondary event is separate from its large event if, between the two peaks, the signal falls below this
                                                 % fraction of the height of the secondary peak above the median of the gap (the 50% rule used to merge the
                                                 % events of option 4) (default: 0.50)
-MIN_DROP_Z = 3;                                 % (option 4) the drop must also be at least MIN_DROP_Z times its sampling noise (binomial noise of the
-                                                % participation, which is large with few units) (default: 3)
+MIN_DROP_Z = 3;                                 % the drop must also be at least MIN_DROP_Z times its sampling noise, which is large with few units and fine
+                                                % bins: binomial noise of the participation (option 4), Poisson noise of the spike counts (options 1-3; revised
+                                                % November 2026, user's choice: before, option 4 only) (default: 3)
 apply_parameters('Optimal_secondaryPeak');                                  % (revised October 2026) values of the parameter set of "run_pipeline", if any (see "pipeline_parameters")
 
 switch opt_binopti
@@ -230,6 +232,7 @@ if n_window > 0
             nbursts = 0;        idx = 0;
             PopActivityPeak = PopActivityPeak0;
             nburst_per_gap = nan(n_window,1);
+            search_windows = nan(n_window,2);                                % (new, November 2026) window of the search in each gap [start end], in sec
             for k=1:n_window 
                 gap = window_edge(k,2) - window_edge(k,1);                  % new line
                 if k<n_window
@@ -249,12 +252,13 @@ if n_window > 0
                 fine = [];
                 if use_fine
                     fine = fine_signal(all_t, all_u, n_spk, n_clusters, peak_large(k) - bin1, min(window_edge(k,2), range(2)), binSize, opt_norm, ...
-                        SMOOTH_FINE + SMOOTH_ADD, peak_large(k), bin1, START_LEVEL_FINE);
+                        SMOOTH_FINE + SMOOTH_ADD, peak_large(k), bin1, START_LEVEL_FINE, noise_factor);
                     if ~isempty(fine) && ~isnan(fine.endTime) && fine.endTime < endtime - 5*binSize
                         search_start = fine.endTime;
                     end
                 end
                 secondary_peaks(k,1) = PopulationActivityDetection(units, spikeTimestamp, [search_start; endtime], binSize, threshold2, SMOOTH_ADD, opt_norm, 1, 0);
+                search_windows(k,:) = [search_start, endtime];
                 % (new, November 2026; user's choice) each secondary event must be separate from its large event at this bin: between the two
                 % peaks, the signal falls below SEPARATION_LEVEL of the height of the secondary peak (and, for option 4, by more than MIN_DROP_Z
                 % times its sampling noise); otherwise it is part of the large event. This replaces the comparison with the end of the large
@@ -302,6 +306,7 @@ if n_window > 0
             end
             Current_PopActivityPeak.nBurst = nbursts; 
             Current_PopActivityPeak.nBurst_per_gap = nburst_per_gap;
+            Current_PopActivityPeak.searchWindows = search_windows;          % (new, November 2026) used by the recruitment check (local null of the secondary events)
             Current_PopActivityPeak.bin = binSize; 
                
             % Quality Control on secondary events
@@ -359,7 +364,7 @@ end
 
 end
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-function fine = fine_signal(all_t, all_u, n_spk, n_units, t0, t1, binSize, opt_norm, smoothWindow, t_large, half_window, start_level)
+function fine = fine_signal(all_t, all_u, n_spk, n_units, t0, t1, binSize, opt_norm, smoothWindow, t_large, half_window, start_level, noise_factor)
 
 % (new, November 2026) population signal from the large event to the end of its gap, at the bin of the secondary search, with the same type of
 % signal (opt_norm) and smoothing as the search, and where the large event falls to "start_level" of its height above the median of the gap
@@ -382,12 +387,16 @@ switch opt_norm
     case 2                                                                  % participation: fraction of units with at least one spike
         pairs = unique((u - 1)*n_bins + b);
         y = accumarray(mod(pairs - 1, n_bins) + 1, 1, [n_bins, 1])/max(n_units, 1);
+        v = zeros(n_bins,1);                                                % (binomial noise: computed from y in "separation")
     case 1                                                                  % normalized rate: spikes of each unit / its total spikes, mean across units
         y = accumarray(b, 1./n_spk(u), [n_bins, 1])/max(sum(n_spk > 0), 1);
+        v = accumarray(b, 1./n_spk(u).^2, [n_bins, 1])/max(sum(n_spk > 0), 1)^2;   % Poisson variance of y (each spike count used as its variance)
     otherwise                                                               % mean spike count
         y = accumarray(b, 1, [n_bins, 1])/max(n_units, 1);
+        v = accumarray(b, 1, [n_bins, 1])/max(n_units, 1)^2;               % Poisson variance of y
 end
 y = smoothdata(y, 'gaussian', smoothWindow);
+v = smoothdata(v, 'gaussian', smoothWindow)*noise_factor^2;                % variance after the smoothing (approximately)
 tc = edges(1:end-1)' + binSize/2;
 near = find(abs(tc - t_large) <= half_window);
 if isempty(near)
@@ -400,15 +409,16 @@ below = find(y(i_large:end) < base + start_level*(peak_amp - base), 1);
 if ~isempty(below) && peak_amp > base
     end_time = tc(i_large + below - 1);
 end
-fine = struct('t', tc, 'y', y, 'iLarge', i_large, 'base', base, 'endTime', end_time);
+fine = struct('t', tc, 'y', y, 'v', v, 'iLarge', i_large, 'base', base, 'endTime', end_time);
 end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 function [separate, drop_own, drop_z] = separation(fine, t_peak2, level, min_z, n_units, opt_norm, noise_factor)
 
 % (new, November 2026) is the secondary peak at t_peak2 separate from the large event of its gap? Between the two peaks the signal must fall
-% below "level" of the height of the secondary peak above the median of the gap (drop_own > 1 - level); for the participation (option 4),
-% the drop must also be at least min_z times its binomial sampling noise (a fraction of n_units, reduced by the smoothing)
+% below "level" of the height of the secondary peak above the median of the gap (drop_own > 1 - level), and the drop must be at least min_z
+% times its sampling noise: binomial for the participation (option 4; a fraction of n_units), Poisson for the spike counts (options 1-3;
+% revised November 2026), reduced by the smoothing
 
 separate = false;   drop_own = nan;   drop_z = nan;
 i2 = find(fine.t <= t_peak2, 1, 'last');
@@ -416,7 +426,9 @@ if isempty(i2) || i2 <= fine.iLarge
     return
 end
 h2 = max(fine.y(max(i2 - 1, fine.iLarge + 1):min(i2 + 1, numel(fine.y))));   % height of the secondary peak at this bin
-valley = min(fine.y(fine.iLarge:i2));                                           % lowest point between the two peaks
+[valley, iv] = min(fine.y(fine.iLarge:i2));                                    % lowest point between the two peaks
+iv = fine.iLarge + iv - 1;
+nb = max(i2 - 1, fine.iLarge + 1):min(i2 + 1, numel(fine.y));   [~, ip] = max(fine.y(nb));   ip = nb(ip);   % bin of the secondary peak
 height = h2 - fine.base;
 if height <= 0
     drop_own = 0;
@@ -427,6 +439,8 @@ separate = valley < fine.base + level*height;
 if opt_norm == 2
     se = @(p) noise_factor*sqrt(max(p*(1 - p), 0)/max(n_units, 1));
     drop_z = (h2 - valley)/max(sqrt(se(min(h2, 1))^2 + se(min(valley, 1))^2), eps);
-    separate = separate && drop_z >= min_z;
+else                                                                        % (revised November 2026, user's choice) options 1-3: Poisson noise
+    drop_z = (h2 - valley)/max(sqrt(fine.v(ip) + fine.v(iv)), eps);
 end
+separate = separate && drop_z >= min_z;
 end

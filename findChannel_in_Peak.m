@@ -43,6 +43,8 @@ MIN_PARTICIPATION = 0.20;                       % minimum proportion of network 
 MIN_PARTICIPATION_ABS = 2.0;                    % minimum number of network bursts in which a channel has to participate (default: 2)
 ACTIVITY_THRESHOLD_FINAL = 1.80;                % (used during statistical assessment) threshold for the ratio between the firing rate within potential network bursts and overall firing rate (default: 2.0, NOT higher)
                                                 % lower it (1.60) when there is high level of population activity (it is not a few individual units with high level of activity)
+MIN_EVENTS_CLASS = 3;                           % (new, November 2026) the large (level-1) and small (level-0) primary events are evaluated separately (activity filter
+                                                % and statistical assessment) when there are at least MIN_EVENTS_CLASS small events (default: 3; user's choice)
 apply_parameters('findChannel_in_Peak');                                    % (revised October 2026) values of the parameter set of "run_pipeline", if any (see "pipeline_parameters")
 
 K_MSEC_SEC = 1/1000;                            % factor to rescale from msec to sec
@@ -130,41 +132,70 @@ PopActivity.timeStamp = timeStamp;                                          % ti
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Identify the neurons that are too noisy (activity during network burst events is similar to the rest)
         
+% (revised November 2026; user's choice) the activity is compared within each class of events (large, small), and a unit is kept in the
+% events of the classes where its activity is high enough; with fewer than MIN_EVENTS_CLASS small events, all the events together, as before
+% (many small events, e.g. noise bumps, diluted the activity of the units during the large events). The previous code, commented, below
+groups = event_groups(PopActivity, Npeak, MIN_EVENTS_CLASS);
 meaningful_activity = zeros(n_channels,1);
 for ch=1:n_channels                                                         % across all clusters
-            
-    spikes_in = 0;                                                          % total number of spikes during the potential network bursts, for channel ch
-    window_in = 0;                                                          % total duration of all potential network burst, in sec
-            
-    for k=1:Npeak
-        spikes_in = spikes_in + numel(PopActivity.timeStamp{k,ch});         
-        window_in = window_in + PopActivity.IndivBurst(k).window*K_MSEC_SEC;  % extended duration of the event k, in sec: the same window used to collect its spikes
-                                                                            % (revised October 2026: it was the core duration, last-start, while the spikes were counted
-                                                                            %  in the window extended by SAFE_K on each side -> rate overestimated by up to 1.8x)
-    end
-
     switch opt_test
-            
         case 1  % old method
-
-            aux1 = find(BurstDetected{ch}.spikes(:,1)>=range(1)/K_MSEC_SEC);         % index for all spikes of neuron ch, after starting point of analysis window
-            aux2 = find(BurstDetected{ch}.spikes(:,1)<range(2)/K_MSEC_SEC);         % index for all spikes of neuron ch, before last point of analysis window
-            aux = intersect(aux1, aux2);                                            % index for all spikes of neuron ch, within the event k
-            spikes_total = numel(aux);                                              % total number of spikes of neuron ch during the analysis window 
-    
+            aux1 = find(BurstDetected{ch}.spikes(:,1)>=range(1)/K_MSEC_SEC);
+            aux2 = find(BurstDetected{ch}.spikes(:,1)<range(2)/K_MSEC_SEC);
+            spikes_total = numel(intersect(aux1, aux2));
         case 2  % binnary search
-                
             [spikes_total, ~, ~] = windowMembership(BurstDetected{ch}.spikes(:,1), range(1)/K_MSEC_SEC, range(2)/K_MSEC_SEC, 1, 0);
     end
-
-    freq_in = spikes_in/window_in;
     freq_total = spikes_total/(range(2)-range(1));
-    if freq_in > freq_total * ACTIVITY_THRESHOLD
-        meaningful_activity(ch) = 1;                                        % the activity during the peaks is higher than the rest of the recording
-    else
-        burst_id(:,ch) = 0;                                                 % remove channel ch from the participating clusters
+    for g=1:numel(groups)
+        ev = groups{g};
+        spikes_in = 0;  window_in = 0;
+        for k=ev(:)'
+            spikes_in = spikes_in + numel(PopActivity.timeStamp{k,ch});
+            window_in = window_in + PopActivity.IndivBurst(k).window*K_MSEC_SEC;   % extended duration of the event k, in sec (the window of its spikes)
+        end
+        if spikes_in/window_in > freq_total * ACTIVITY_THRESHOLD
+            meaningful_activity(ch) = 1;                                    % the activity during these events is higher than the rest of the recording
+        else
+            burst_id(ev,ch) = 0;                                            % remove channel ch from these events
+        end
     end
 end
+%meaningful_activity = zeros(n_channels,1);
+%for ch=1:n_channels                                                         % across all clusters
+            
+%    spikes_in = 0;                                                          % total number of spikes during the potential network bursts, for channel ch
+%    window_in = 0;                                                          % total duration of all potential network burst, in sec
+            
+%    for k=1:Npeak
+%        spikes_in = spikes_in + numel(PopActivity.timeStamp{k,ch});         
+%        window_in = window_in + PopActivity.IndivBurst(k).window*K_MSEC_SEC;  % extended duration of the event k, in sec: the same window used to collect its spikes
+%                                                                            % (revised October 2026: it was the core duration, last-start, while the spikes were counted
+%                                                                            %  in the window extended by SAFE_K on each side -> rate overestimated by up to 1.8x)
+%    end
+
+%    switch opt_test
+            
+%        case 1  % old method
+
+%            aux1 = find(BurstDetected{ch}.spikes(:,1)>=range(1)/K_MSEC_SEC);         % index for all spikes of neuron ch, after starting point of analysis window
+%            aux2 = find(BurstDetected{ch}.spikes(:,1)<range(2)/K_MSEC_SEC);         % index for all spikes of neuron ch, before last point of analysis window
+%            aux = intersect(aux1, aux2);                                            % index for all spikes of neuron ch, within the event k
+%            spikes_total = numel(aux);                                              % total number of spikes of neuron ch during the analysis window 
+    
+%        case 2  % binnary search
+                
+%            [spikes_total, ~, ~] = windowMembership(BurstDetected{ch}.spikes(:,1), range(1)/K_MSEC_SEC, range(2)/K_MSEC_SEC, 1, 0);
+%    end
+
+%    freq_in = spikes_in/window_in;
+%    freq_total = spikes_total/(range(2)-range(1));
+%    if freq_in > freq_total * ACTIVITY_THRESHOLD
+%        meaningful_activity(ch) = 1;                                        % the activity during the peaks is higher than the rest of the recording
+%    else
+%        burst_id(:,ch) = 0;                                                 % remove channel ch from the participating clusters
+%    end
+%end
 
 if Npeak>0
     aux_burst = nan(Npeak,1);
@@ -219,6 +250,37 @@ for k=1:Npeak                                                               % ac
     window2(k,2) = (fin0 + (fin0-ini0)*SAFE_K)/K_MSEC_SEC;                  % last point of the burst k, in msec
 end
         
+% Identify the participating clusters
+% (revised November 2026; user's choice) with opt_test = 2, the large and the small events are tested separately (each class with its own
+% shuffles count, participation and activity ratio), and a unit participates if it passes in either class; with fewer than MIN_EVENTS_CLASS
+% small events, all the events together, as before (many small events made "participation > MIN_PARTICIPATION" impossible). opt_test = 1:
+% the previous code, unchanged
+if opt_test == 2
+participation = zeros(n_channels,1);
+groups = event_groups(PopActivity, Npeak, MIN_EVENTS_CLASS);
+for ch=1:n_channels                                                         % across all clusters
+    data = BurstDetected{ch}.spikes(:,1);                                   % spike train data for channel ch
+    if numel(data) == 0                                                     % there are no spikes in cluster ch
+        continue
+    end
+    shuffles = shuffleCache('get', ch, data, range/K_MSEC_SEC, t_step, N_SHUFFLING, BurstDetected{ch}, RNG_SEED + ch);
+    n_events1 = windowCounts(data, window(:,1), window(:,2));              % number of spikes of the original signal within each burst event
+    n_events2 = windowCounts(data, window2(:,1), window2(:,2));            % number of spikes within each (extended) burst event
+    [spikes_total, ~, ~] = windowMembership(data, range(1)/K_MSEC_SEC, range(2)/K_MSEC_SEC, 1, 0);
+    freq_total = spikes_total/(range(2)-range(1));
+    for g=1:numel(groups)
+        ev = groups{g};
+        hits = shuffleHits(shuffles, window(ev,1), window(ev,2));          % number of events of this class in which each shuffled signal has a spike
+        event = sum(n_events1(ev) > 0);                                     % number of events of this class in which the original signal has a spike
+        window_in = sum(window2(ev,2) - window2(ev,1))*K_MSEC_SEC;         % total duration of the (extended) events of this class, in sec
+        freq_ratio = (sum(n_events2(ev))/window_in)/freq_total;
+        score = numel(find(hits < event))/N_SHUFFLING;
+        if score >= STAT_THRESHOLD && event/numel(ev) > MIN_PARTICIPATION && event >= MIN_PARTICIPATION_ABS && freq_ratio > ACTIVITY_THRESHOLD_FINAL
+            participation(ch) = 1;                                          % the participation of cluster ch in this class of events is statistically significant
+        end
+    end
+end
+else
 % Identify the participating clusters
 participation = zeros(n_channels,1);
 for ch=1:n_channels                                                         % across all clusters
@@ -316,6 +378,8 @@ for ch=1:n_channels                                                         % ac
     end
 end
 
+end
+
 Ch_in_Peak = PopActivity;
 Ch_in_Peak.participation = participation;
 aux_burst = [];     burst_id = [];      meaningful_activity = [];
@@ -335,4 +399,26 @@ if isfield(event, 'coreLast') && ~isempty(event.coreLast) && ~isnan(event.coreLa
     fin0 = event.coreLast;
 end
 
+end
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+function groups = event_groups(PopActivity, Npeak, min_small)
+
+% (new, November 2026) groups of events evaluated separately: the large (level-1) and the small (level-0) primary events, when there are at
+% least min_small small events; otherwise (or for the secondary events, which have a "parent", or events without a level) all the events
+
+groups = {(1:Npeak)'};
+if Npeak == 0 || ~isfield(PopActivity.IndivBurst, 'level') || isfield(PopActivity.IndivBurst, 'parent')
+    return
+end
+lv = nan(Npeak,1);
+for k=1:Npeak
+    if ~isempty(PopActivity.IndivBurst(k).level)
+        lv(k) = PopActivity.IndivBurst(k).level;
+    end
+end
+large = find(lv == 1);  small = find(lv ~= 1);
+if ~isempty(large) && numel(small) >= min_small
+    groups = {large, small};
+end
 end

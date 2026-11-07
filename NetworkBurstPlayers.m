@@ -86,7 +86,7 @@ MIN_SOLID_BURST_SMALL = 3;                      % minimum number of solid small 
 
 % to assess the secondary peaks
 MIN_PEAK2_GAP = 1;                              % minimum number of secondary peaks per gap/window (default: 1)
-GAP_WITH_PEAK = 0.50;                           % minimum proportion of primary peaks followed by secondary peaks (default: 0.50)
+GAP_WITH_PEAK = 0.40;                           % minimum proportion of primary peaks followed by secondary peaks (default: 0.40)
                                                 % (revised November 2026: 0.75 -> 0.50, the same value as in "NetworkBurstDetection")
 
 MIN_PARTICIPATION_SECONDARY = 0.40;             % minimum proportion of secondary network bursts in which a channel has to participate (default: 0.40)        

@@ -228,9 +228,17 @@ P.NetworkBurstDetection.MIN_CHAN_RATIO = 0.075;                 % minimum number
 P.NetworkBurstDetection.MIN_CHAN_BURST_RATIO = 0.02;            % minimum number of channels/units in a single network burst, as a proportion of the total number of units (default: 0.02-0.05)
 P.NetworkBurstDetection.FACTOR_FIRST_ROUND = 0.80;              % (default: 0.8)
 P.NetworkBurstDetection.MIN_CHAN_SECONDARY = 0.20;              % minimum number of participating channels/units to accept the secondary events, in terms of the number of participating units in the primary events (default: 0.20)
+P.NetworkBurstDetection.NONNORM_MARGIN = 0.10;                 % (new, November 2026) methods 1-3: the non-normalized signal is kept only with at least 10% more large events (default: 0.10)
+P.NetworkBurstDetection.RECRUIT_PERCENTILE = 99;               % (new, November 2026) methods 1-3: small primary and secondary events kept only if the fraction of participating units firing in them is above this percentile of the surrogates (default: 99)
+P.NetworkBurstDetection.RECRUIT_N_SURROGATE = 200;             % number of surrogates for the recruitment check (default: 200)
+P.NetworkBurstDetection.RECRUIT_SEED = 0;                      % seed of the surrogates of the recruitment check
+P.NetworkBurstDetection.RECRUIT_EXCLUDE_TAIL = 3;              % fallback when the detection gives no closed zones: each large event, from its start to this number of durations after its end (default: 3)
+P.NetworkBurstDetection.RECRUIT_PEAK_BINS = 2;                 % (new, November 2026) small events: window centred on their peak where the recruitment is measured, in detection bins (default: 2)
+P.NetworkBurstDetection.RECRUIT_REL_MIN = 0.20;                % (new, November 2026) small events: minimum relative recruitment, (f - baseline)/(large events - baseline) in that window; 0 = no minimum (default: 0.20; 0.15 with the global baseline)
+P.NetworkBurstDetection.RECRUIT_LOCAL_BINS = 20;               % (new, November 2026) small events: baseline = recruitment in this number of bins before and after the event (quieter side); 0 = global chance level (default: 20)
 P.NetworkBurstDetection.MIN_PEAK2_GAP = 1;                      % minimum number of secondary events per gap/window, after a level-1 primary event (default: 1)
-P.NetworkBurstDetection.GAP_WITH_PEAK = 0.50;                   % minimum proportion of gaps/windows (level-1 primary events) followed by MIN_PEAK2_GAP secondary events, to accept
-                                                                % the secondary events (default: 0.50; it was 0.75 until November 2026)
+P.NetworkBurstDetection.GAP_WITH_PEAK = 0.40;                   % minimum proportion of gaps/windows (level-1 primary events) followed by MIN_PEAK2_GAP secondary events, to accept
+                                                                % the secondary events (default: 0.40; it was 0.75 until November 2026, then 0.50)
 
 % NetworkBurstDetection: parameters of the option method1 (they depend on the method)
 P.NetworkBurstDetection.method1.BIN = 0.2;                      % size of the temporal bin to calculate the population firing rate, in sec (0.2-0.4)
@@ -291,6 +299,8 @@ P.PopulationActivityDetection.ACTIVITY_THRESHOLD = 0.05;        % minimum level 
 P.PopulationActivityDetection.PEAK_THRESHOLD = 20;              % threshold to run the second round of searching, relative to median firing rate (default: 20)
 P.PopulationActivityDetection.TAIL_FACTOR = 3;                  % (new, November 2026) the tail of a large event lasts until the signal returns to its median, and at most
                                                                 % TAIL_FACTOR times the duration of the event after its end (default: 3)
+P.PopulationActivityDetection.NOISE_ROBUST = 1;                 % (new, November 2026) noise of the second round (small events): 1 = 1.4826 x median absolute deviation; 0 = standard deviation (default: 1)
+P.PopulationActivityDetection.NOISE_FLOOR_SD = 0.25;            % (new, November 2026) floor of the robust noise, as a proportion of the standard deviation (default: 0.25)
 % PopulationActivityDetection: option 4 of NetworkBurstDetection (new, November 2026; participation signal, thresholds from surrogates)
 P.PopulationActivityDetection.N_SURROGATE = 1000;               % number of surrogates; each unit is circularly shifted by an independent random offset (default: 1000)
 P.PopulationActivityDetection.SURROGATE_SEED = 0;               % seed of the random offsets (the same seed gives the same surrogates)
@@ -347,7 +357,7 @@ P.Optimal_secondaryPeak.BIN2_FACTOR_FIXED = 0.30;               % reduction fact
 P.Optimal_secondaryPeak.SMOOTH_FINE = 3;                        % smoothing of the signal at the bin of the secondary search, in number of bins (+SMOOTH_ADD) (default: 3)
 P.Optimal_secondaryPeak.START_LEVEL_FINE = 0.50;                % the search starts where the large event falls to this fraction of its height above the median of the gap (default: 0.50)
 P.Optimal_secondaryPeak.SEPARATION_LEVEL = 0.50;                % between the two peaks, the signal must fall below this fraction of the height of the secondary peak (default: 0.50)
-P.Optimal_secondaryPeak.MIN_DROP_Z = 3;                         % (option 4) minimum drop, in units of its binomial sampling noise (default: 3)
+P.Optimal_secondaryPeak.MIN_DROP_Z = 3;                         % minimum drop, in units of its sampling noise: binomial (option 4) or Poisson (options 1-3) (default: 3)
 
 
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -385,6 +395,7 @@ P.findChannel_in_Peak.RNG_SEED = 0;                             % base seed for 
 P.findChannel_in_Peak.STAT_THRESHOLD = 0.95;                    % threshold of statistical significance (default: 0.95)
 P.findChannel_in_Peak.MIN_PARTICIPATION = 0.20;                 % minimum proportion of network bursts in which a channel has to participate (default: 0.20)
 P.findChannel_in_Peak.MIN_PARTICIPATION_ABS = 2.0;              % minimum number of network bursts in which a channel has to participate (default: 2)
+P.findChannel_in_Peak.MIN_EVENTS_CLASS = 3;                    % (new, November 2026) large and small events evaluated separately when there are at least this many small events (default: 3)
 P.findChannel_in_Peak.ACTIVITY_THRESHOLD_FINAL = 1.80;          % (used during statistical assessment) threshold for the ratio between the firing rate within potential network bursts and overall firing rate (default: 2.0, NOT higher)
                                                                 % lower it (1.60) when there is high level of population activity (it is not a few individual units with high level of activity)
 
