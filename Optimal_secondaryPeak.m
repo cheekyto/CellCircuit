@@ -122,6 +122,7 @@ if use_fine
     n_spk = cellfun(@numel, spk_t);
     all_t = vertcat(spk_t{:});
     all_u = repelem((1:n_clusters)', n_spk);
+    all_u = all_u(:);                                                       % (fix, November 2026) a column also with a single cluster ("repelem" of a scalar gives a row)
     [all_t, order] = sort(all_t);   all_u = all_u(order);
     impulse = zeros(4*(SMOOTH_FINE + SMOOTH_ADD) + 1, 1);   impulse(2*(SMOOTH_FINE + SMOOTH_ADD) + 1) = 1;
     noise_factor = sqrt(sum(smoothdata(impulse, 'gaussian', SMOOTH_FINE + SMOOTH_ADD).^2));   % reduction of the noise by the smoothing
