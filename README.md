@@ -69,7 +69,7 @@ Every change that alters a result was reviewed on its own, with its measured eff
 
 **Reproducible.**
 - One command runs the whole pipeline for a list of recordings: `run_pipeline("recordings.csv")`.
-- All 264 parameters of the pipeline live in a single file, `pipeline_parameters.m`.
+- All 265 parameters of the pipeline live in a single file, `pipeline_parameters.m`.
 - The parameter set used for each recording is saved next to its data, with the history of its runs and the git version of the code.
 - A recording can be rerun with the same set, with a different set, or with a few values changed.
 

@@ -177,6 +177,8 @@ P.Analyze_spikeTrain.NETWORK_BURST_DETECT_METHOD = 3;           % algorithm to b
                                                                 %  =1       Population firing rate
                                                                 %  =2       looking for peaks, combining the regular population firing rate and the normalized population firing; and using a progressive narrowing of the binSize
                                                                 %  =3       option 2 + clustering
+                                                                %  =4       option 3 with the participation signal and thresholds from surrogates (new, November 2026)
+                                                                %  =5       option 3, plus the large events of option 4 that option 3 does not have, as small events (new, November 2026)
 P.Analyze_spikeTrain.NETWORK_BURST_ANALYSIS_METHOD = 2;         % algorithm to be used for network burst analysis
                                                                 %  =1       single family of network bursting, with a single set of participating channels
                                                                 %  =2       cluster analysis to identify different families of network bursts
@@ -236,6 +238,7 @@ P.NetworkBurstDetection.RECRUIT_EXCLUDE_TAIL = 3;              % fallback when t
 P.NetworkBurstDetection.RECRUIT_PEAK_BINS = 2;                 % (new, November 2026) small events: window centred on their peak where the recruitment is measured, in detection bins (default: 2)
 P.NetworkBurstDetection.RECRUIT_REL_MIN = 0.20;                % (new, November 2026) small events: minimum relative recruitment, (f - baseline)/(large events - baseline) in that window; 0 = no minimum (default: 0.20; 0.15 with the global baseline)
 P.NetworkBurstDetection.RECRUIT_LOCAL_BINS = 20;               % (new, November 2026) small events: baseline = recruitment in this number of bins before and after the event (quieter side); 0 = global chance level (default: 20)
+P.NetworkBurstDetection.ADD_MATCH_TOL = 0.5;                   % (new, November 2026) option 5: a large event of option 4 matches an event of option 3 when the peaks are within this time (sec) or one peak is inside the other event (default: 0.5)
 P.NetworkBurstDetection.MIN_PEAK2_GAP = 1;                      % minimum number of secondary events per gap/window, after a level-1 primary event (default: 1)
 P.NetworkBurstDetection.GAP_WITH_PEAK = 0.40;                   % minimum proportion of gaps/windows (level-1 primary events) followed by MIN_PEAK2_GAP secondary events, to accept
                                                                 % the secondary events (default: 0.40; it was 0.75 until November 2026, then 0.50)

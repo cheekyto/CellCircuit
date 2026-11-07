@@ -98,6 +98,10 @@ SHIFT = 1;
 FAST_MODE = 1;                                  % =1, don't search for participating units for secondary peaks until the last round
                                                 % =0, seach for participating units for secondary peaks
 apply_parameters('NetworkBurstPlayers');                                    % (revised October 2026) values of the parameter set of "run_pipeline", if any (see "pipeline_parameters")
+if nargin == 0                                                              % (new, November 2026) parameters only: the spikes of the events added by
+    NetworkBurstPlayers = struct('SAFE_K', SAFE_K, 'option_test', option_test);   % option 5 of "NetworkBurstDetection"
+    return
+end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%     Prepare the data and the settings       %%%
@@ -295,37 +299,18 @@ switch option
             % load the timeStamp for units in primary events
             timeStamp = cell(n_peak1, n_channels);
             if ~FAST_MODE
-                % (revised October 2026) the window of each event is calculated once (before, once per cluster), and there is no "clear" inside
-                % the loops (it took most of the time of these loops); same results
-                ini_Nburst = nan(n_peak1,1);     fin_Nburst = nan(n_peak1,1);
+                % (revised November 2026) the window of each event and its spikes come from "eventSpikes" (the same code as before, shared with
+                % the secondary events below and with option 5 of "NetworkBurstDetection"; same results)
+                starts = nan(n_peak1,1);    lasts = nan(n_peak1,1);
                 for k=1:n_peak1                                                 % across all network bursts
-                    ini_Nburst(k) = NetworkBurstPlayers.IndivBurst(k).start;    % starting point of the event k, in sec
-                    fin_Nburst(k) = NetworkBurstPlayers.IndivBurst(k).last;     % last point of the event k, in sec
-                    time_added = (fin_Nburst(k)-ini_Nburst(k))*SAFE_K;          % extra time added: SAFE_K*duration before the event, and 2*SAFE_K*duration after it
-                    ini_Nburst(k) = ini_Nburst(k) - time_added;                 % just in case, add more data points to the left
-                    fin_Nburst(k) = fin_Nburst(k) + time_added*2;               % just in case, add more data points to the right (twice as many: intended)
-                    if n_channels > 0
-                        NetworkBurstPlayers.IndivBurst(k).window = fin_Nburst(k) - ini_Nburst(k); % time window for the spike train extraction (based on the core duration of the burst), in sec
-                    end
+                    starts(k) = NetworkBurstPlayers.IndivBurst(k).start;        % starting point of the event k, in sec
+                    lasts(k) = NetworkBurstPlayers.IndivBurst(k).last;          % last point of the event k, in sec
                 end
-                for ch=1:n_channels                                             % across all clusters (participating and non-participating)
-                    for k=1:n_peak1                                             % across all network bursts
-                        switch option_test
-                            case 1  % old method
-                                aux1 = find(BurstDetected{ch}.spikes(:,1)>=ini_Nburst(k)/K_MSEC_SEC);   % index for all spikes of neuron ch, after starting point of analysis window
-                                aux2 = find(BurstDetected{ch}.spikes(:,1)<fin_Nburst(k)/K_MSEC_SEC);    % index for all spikes of neuron ch, before last point of analysis window
-                                aux = intersect(aux1, aux2);                                            % index for all spikes of neuron ch, within the event k
-    
-                            case 2  % binnary search
-                                [~, aux, ~] = windowMembership(BurstDetected{ch}.spikes(:,1), ini_Nburst(k)/K_MSEC_SEC, fin_Nburst(k)/K_MSEC_SEC, 1, 1);
-                        end
-
-                        if numel(aux)>0
-                            timeStamp{k,ch} = BurstDetected{ch}.spikes(aux,1);      % time stamp of all spikes from neuron ch within the event k
-                        else
-                            timeStamp{k,ch} = [];                                   % do not have spikes within the network burst
-                        end                
-                    end            
+                [timeStamp, window] = eventSpikes(BurstDetected, n_channels, starts, lasts, SAFE_K, option_test);
+                if n_channels > 0
+                    for k=1:n_peak1
+                        NetworkBurstPlayers.IndivBurst(k).window = window(k);  % time window for the spike train extraction (based on the core duration of the burst), in sec
+                    end
                 end
             end            
             NetworkBurstPlayers.timeStamp = timeStamp;                          % time stamp of the spikes within the network bursts
@@ -339,35 +324,16 @@ switch option
                 if n_peak2 > 0
                     [NetworkBurstPlayers.Secondary, a, b, c] = findChannel_in_Peak(BurstDetected, n_channels, t_step, n_peak2, NetworkBurstPlayers.Secondary, range, option_test, option);
                     NetworkBurstPlayers.Secondary.Channels(:,1) = find(NetworkBurstPlayers.Secondary.participation>0);   % index of participating neurons in secondary events
-                    % (revised October 2026) windows calculated once and no "clear" inside the loops, as for the primary events; same results
-                    ini_Nburst = nan(n_peak2,1);     fin_Nburst = nan(n_peak2,1);
+                    % (revised November 2026) windows and spikes from "eventSpikes", as for the primary events; same results
+                    starts = nan(n_peak2,1);    lasts = nan(n_peak2,1);
                     for k=1:n_peak2                                                             % across all secondary network bursts
-                        ini_Nburst(k) = NetworkBurstPlayers.Secondary.IndivBurst(k).start;      % starting point of the event k, in sec
-                        fin_Nburst(k) = NetworkBurstPlayers.Secondary.IndivBurst(k).last;       % last point of the event k, in sec
-                        time_added = (fin_Nburst(k)-ini_Nburst(k))*SAFE_K;                      % extra time added: SAFE_K*duration before the event, and 2*SAFE_K*duration after it
-                        ini_Nburst(k) = ini_Nburst(k) - time_added;                             % just in case, add more data points to the left
-                        fin_Nburst(k) = fin_Nburst(k) + time_added*2;                           % just in case, add more data points to the right (twice as many: intended)
-                        if n_channels > 0
-                            NetworkBurstPlayers.Secondary.IndivBurst(k).window = fin_Nburst(k) - ini_Nburst(k); % time window for the spike train extraction (based on the core duration of the burst), in sec
-                        end
+                        starts(k) = NetworkBurstPlayers.Secondary.IndivBurst(k).start;          % starting point of the event k, in sec
+                        lasts(k) = NetworkBurstPlayers.Secondary.IndivBurst(k).last;            % last point of the event k, in sec
                     end
-                    for ch=1:n_channels     
-                        for k=1:n_peak2                                                         % across all secondary network bursts
-                            switch option_test
-                                case 1  % old method
-                                    aux1 = find(BurstDetected{ch}.spikes(:,1)>=ini_Nburst(k)/K_MSEC_SEC);   % index for all spikes of neuron ch, after starting point of analysis window
-                                    aux2 = find(BurstDetected{ch}.spikes(:,1)<fin_Nburst(k)/K_MSEC_SEC);    % index for all spikes of neuron ch, before last point of analysis window
-                                    aux = intersect(aux1, aux2);                                            % index for all spikes of neuron ch, within the event k
-    
-                                case 2  % binnary search
-                                    [~, aux, ~] = windowMembership(BurstDetected{ch}.spikes(:,1), ini_Nburst(k)/K_MSEC_SEC, fin_Nburst(k)/K_MSEC_SEC, 1, 1);
-                            end
-
-                            if numel(aux)>0
-                                timeStamp2{k,ch} = BurstDetected{ch}.spikes(aux,1);             % time stamp of all spikes from neuron ch within the event k
-                            else
-                                timeStamp2{k,ch} = [];                                          % do not have spikes within the network burst
-                            end
+                    [timeStamp2, window] = eventSpikes(BurstDetected, n_channels, starts, lasts, SAFE_K, option_test);
+                    if n_channels > 0
+                        for k=1:n_peak2
+                            NetworkBurstPlayers.Secondary.IndivBurst(k).window = window(k);    % time window for the spike train extraction, in sec
                         end
                     end
                 end

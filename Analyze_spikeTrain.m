@@ -42,6 +42,7 @@ NETWORK_BURST_DETECT_METHOD = 3;                    % algorithm to be used for n
                                                     %  =2       looking for peaks, combining the regular population firing rate and the normalized population firing; and using a progressive narrowing of the binSize
                                                     %  =3       option 2 + clustering
                                                     %  =4       option 3 with the participation signal and thresholds from surrogates (new, November 2026)
+                                                    %  =5       option 3, plus the large events of option 4 that option 3 does not have, as small events (new, November 2026)
 NETWORK_BURST_ANALYSIS_METHOD = 2;                  % algorithm to be used for network burst analysis
                                                     %  =1       single family of network bursting, with a single set of participating channels
                                                     %  =2       cluster analysis to identify different families of network bursts

@@ -78,6 +78,10 @@ PERCENTILE_SMALL = 99;                          % small (level-0) events: peak a
 ALPHA_SECONDARY = 0.05;                         % secondary events (opt_secondary = 1): peak above the (1-ALPHA_SECONDARY) quantile of the surrogate maxima
                                                 % within the window (max statistic) (default: 0.05)
 apply_parameters('PopulationActivityDetection');                            % (revised October 2026) values of the parameter set of "run_pipeline", if any (see "pipeline_parameters")
+if nargin == 0                                                              % (new, November 2026) parameters only: the edges of the events added by
+    PopulationActivityDetection = struct('START_LEVEL', START_LEVEL, 'END_LEVEL', END_LEVEL);   % option 5 of "NetworkBurstDetection"
+    return
+end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%     Population Firing rate 
@@ -290,7 +294,7 @@ if contador>0
         level_final(g) = peak_level(best);
         start_final(g) = min(start_burst(m));
         end_final(g) = max(end_burst(m));
-        members{g} = struct('start', start_burst(m), 'end', end_burst(m), 'best', find(m == best));
+        members{g} = struct('startIdx', start_Nburst_final(m), 'endIdx', end_Nburst_final(m), 'best', find(m == best));   % (edges in bins: see "characterizeEvent")
     end
 
     IndBurst(sm).peak = peak_final;
@@ -340,21 +344,11 @@ if n_peaks_final>0
                 'start', IndBurst(sm_optimal).start50(k), 'end', IndBurst(sm_optimal).end50(k), ...
                 'start20', IndBurst(sm_optimal).start20(k), 'end20', IndBurst(sm_optimal).end20(k), ...
                 'start50', IndBurst(sm_optimal).start50(k), 'end50', IndBurst(sm_optimal).end50(k));
-        else                                                                % methods 1-3: each candidate of the (merged) event is refined
-            cand = IndBurst(sm_optimal).members{k};
-            n_cand = numel(cand.start);
-            s_c = nan(n_cand,1);    e_c = nan(n_cand,1);    s50_c = nan(n_cand,1);  e50_c = nan(n_cand,1);
-            for c=1:n_cand
-                refined = refinePeakDetection(units, spikeTimestamp, cand.start(c), cand.end(c), bin, START_LEVEL, END_LEVEL, opt_norm, opt_plot, spike_merged);
-                s_c(c) = refined.start;     e_c(c) = refined.end;   s50_c(c) = refined.start50;     e50_c(c) = refined.end50;
-                if c == cand.best
-                    peakCharact = refined;                                  % peak of the event: its best candidate
-                end
-            end
-            peakCharact.start = min(s_c);   peakCharact.end = max(e_c);     % edges of the event: the outermost ones (20% level)
-            peakCharact.start20 = peakCharact.start;    peakCharact.end20 = peakCharact.end;
-            peakCharact.start50 = min(s50_c);   peakCharact.end50 = max(e50_c);   % half-width (50% level), reported as a metric
-        end
+        else                                                                % methods 1-3: each candidate of the (merged) event is refined; peak: its best
+            cand = IndBurst(sm_optimal).members{k};                         % candidate; edges (20%) and half-width (50%): the outermost ones
+            peakCharact = characterizeEvent(units, spikeTimestamp, time_binned, bin, cand.startIdx, cand.endIdx, cand.best, START_LEVEL, END_LEVEL, ...
+                opt_norm, opt_plot, spike_merged);                          % (revised November 2026: code moved to "characterizeEvent", shared with option 5
+        end                                                                 %  of "NetworkBurstDetection"; same results)
         peak(k) = peakCharact.peak;                                 % temporal location of the peak of event k, in sec 
         peakAmp(k) = peakCharact.peakAmp;                           % Amplitude of the peak of event k 
         peakIdx(k) = IndBurst(sm_optimal).peak(k);                  % location of the peak of the event k
