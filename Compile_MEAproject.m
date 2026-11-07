@@ -310,7 +310,7 @@ for i=1:n_recordings                                                            
             Number_Spikes_NETburst(idx) = NetworkBurstFeature.nSpikes.mean;               % total number of spikes per network burst, per cluster
             NumberNorm_Spikes_NETburst(idx) = NetworkBurstFeature.nSpikes.norm;           % total number of spikes in network burst, normalized to the total number of spikes in bursting participating clusters
             NumberNorm_SpikesTotal_NETburst(idx) = NetworkBurstFeature.nSpikes.normTotal; % total number of spikes in network burst, normalized to the total number of spikes across all clusters
-            Participation_NETburst(idx) = NetworkBurstFeature.neuronsAct.mean;            % mean number of active neurons within burst normalized to the total number of globally participating neurons
+            Participation_NETburst(idx) = NetworkBurstFeature.neuronsAct.mean;            % mean proportion of the participating units active in each event (all the participating units, or those of the family; comment revised November 2026)
             ParticipationCV_NETburst(idx) = NetworkBurstFeature.neuronsAct.cv;
             Rate_NETburst(idx) = NetworkBurstFeature.rate.mean;                           % rate of network bursting, in 1/min
             RateCV_NETburst(idx) = NetworkBurstFeature.rate.cv;                           % coefficient of variation for rate of network bursting 
@@ -390,7 +390,7 @@ file_output_excel = fullfile(folderPath, sprintf('%s_Compiled.xlsx', group));
 % standard deviations, in msec; revised October 2026: column "Clustering_Quality" after "Number_clusters_Netburst")
 units_firing = {'','','','','','sec', 'sec', '#','#','#','Hz','ad','ad','msec','ad','#/window','ad','ad','ad','ad'};    % (revised October 2026: CV and Fano factors)
 units_bursting = {'','','','','','norm', 'norm', '1/min','ad','ad','ad','sec','ad','#/window','sec','ad','1/sec','ad','ad','ad','msec','norm','1/sec','ad','ad','ad','msec','norm','1/sec','ad','ad','ad','msec'};
-units_netbursting = {'','','','','','#','#','','','#','norm','#','norm','norm','norm','ad','1/min','ad','ad','sec','ad','#/window','sec','ad','ad','ad','1/sec','ad','msec','ad','#','msec','msec','msec','msec','ad','Hz','ad','#','norm','#/primary','ad','Hz'};
+units_netbursting = {'','','','','','#','#','','','#','norm','#','norm','norm','norm','ad','1/min','ad','ad','sec','ad','#/window','sec','ad','sec','ad','sec','ad','ad','ad','1/sec','ad','msec','ad','#','msec','msec','msec','msec','ad','Hz','ad','#','norm','#/primary','ad','Hz'};
 
 writetable(Firing, file_output_excel,'Sheet','Firing','Range','A2',"WriteMode",'replacefile')
 writecell(units_firing,file_output_excel,'Sheet','Firing','Range','A1')

@@ -77,6 +77,8 @@ FFibi_CV2_NETburst = nan(n_cluster,1);     FFibi_VarMean_NETburst = nan(n_cluste
 FFcount_NETburst = nan(n_cluster,1);       MeanCount_NETburst = nan(n_cluster,1);         % (revised October 2026) Fano factor of the counts per window
 Duration_NETburst = nan(n_cluster,1);
 DurationCV_NETburst = nan(n_cluster,1);
+Duration20_NETburst = nan(n_cluster,1);     Duration20CV_NETburst = nan(n_cluster,1);     % (new, November 2026) widths at 20% and 50% (half-width)
+Duration50_NETburst = nan(n_cluster,1);     Duration50CV_NETburst = nan(n_cluster,1);     % of the height of the peak
 Tail_NETburst = nan(n_cluster,1);
 TailCV_NETburst = nan(n_cluster,1);
 Amplitude_NETburst = nan(n_cluster,1);
@@ -164,7 +166,7 @@ for k=1:n_cluster                                                           % ac
             Number_Spikes_NETburst(idx) = NetworkBurstFeature.nSpikes.mean;               % total number of spikes per network burst, per unit
             NumberNorm_Spikes_NETburst(idx) = NetworkBurstFeature.nSpikes.norm;           % total number of spikes in network burst, normalized to the total number of spikes in bursting participating units
             NumberNorm_SpikesTotal_NETburst(idx) = NetworkBurstFeature.nSpikes.normTotal; % total number of spikes in network burst, normalized to the total number of spikes across all units
-            Participation_NETburst(idx) = NetworkBurstFeature.neuronsAct.mean;            % mean number of active neurons within burst normalized to the total number of globally participating neurons
+            Participation_NETburst(idx) = NetworkBurstFeature.neuronsAct.mean;            % mean proportion of the participating units active in each event (all the participating units in option 0, those of the family in options 1 and 2; comment revised November 2026)
             ParticipationCV_NETburst(idx) = NetworkBurstFeature.neuronsAct.cv;
             Rate_NETburst(idx) = NetworkBurstFeature.rate.mean;                           % rate of network bursting, in 1/min
             RateCV_NETburst(idx) = NetworkBurstFeature.rate.cv;                           % coefficient of variation for rate of network bursting 
@@ -174,6 +176,12 @@ for k=1:n_cluster                                                           % ac
             MeanCount_NETburst(idx) = NetworkBurstFeature.rate.meanCount;                 % mean number of network bursts per window
             Duration_NETburst(idx) = NetworkBurstFeature.duration.mean;                   % duration of network burst, in sec 
             DurationCV_NETburst(idx) = NetworkBurstFeature.duration.cv;                   % coefficient of variation for duration of network burst 
+            if isfield(NetworkBurstFeature, 'duration20')                                % (new, November 2026) widths at 20% and 50% of the height of the peak
+                Duration20_NETburst(idx) = NetworkBurstFeature.duration20.mean;          %  (methods 1-3: the 20% width is the duration; method 4: the 50% width)
+                Duration20CV_NETburst(idx) = NetworkBurstFeature.duration20.cv;
+                Duration50_NETburst(idx) = NetworkBurstFeature.duration50.mean;
+                Duration50CV_NETburst(idx) = NetworkBurstFeature.duration50.cv;
+            end
             Tail_NETburst(idx) = NetworkBurstFeature.tail.mean;
             TailCV_NETburst(idx) = NetworkBurstFeature.tail.cv;
             Amplitude_NETburst(idx) = NetworkBurstFeature.amplitude.mean;                 % amplitude (spiking frequency) per cluster in network burst, in Hz
@@ -231,7 +239,7 @@ for k=1:n_cluster                                                           % ac
 end
 
 NETbursting = table(Organoid, File, ttx_qc, Condition, dose, Number_NETburst_Events, Number_clusters_Netburst, Clustering_Quality, label_cluster_Netburst, Number_NETburst_Neurons, NumberNorm_NETburst_Neurons, Number_Spikes_NETburst, NumberNorm_Spikes_NETburst, NumberNorm_SpikesTotal_NETburst, ...
-                    Participation_NETburst, ParticipationCV_NETburst, Rate_NETburst, RateCV_NETburst, FFibi_CV2_NETburst, FFibi_VarMean_NETburst, FFcount_NETburst, MeanCount_NETburst, Duration_NETburst, DurationCV_NETburst, Tail_NETburst, TailCV_NETburst, Amplitude_NETburst, AmplitudeCV_NETburst, ...
+                    Participation_NETburst, ParticipationCV_NETburst, Rate_NETburst, RateCV_NETburst, FFibi_CV2_NETburst, FFibi_VarMean_NETburst, FFcount_NETburst, MeanCount_NETburst, Duration_NETburst, DurationCV_NETburst, Duration20_NETburst, Duration20CV_NETburst, Duration50_NETburst, Duration50CV_NETburst, Tail_NETburst, TailCV_NETburst, Amplitude_NETburst, AmplitudeCV_NETburst, ...
                     Distance_NETburst, DistanceCV_NETburst, tempStructNeuron_NETburst, Onset_NETburst, OnsetCV_NETburst, Peak_NETburst, PeakCV_NETburst, Correlation_NETburst, ...
                     PeakFire_NETburst, PeakFireNorm_NETburst, Number_SecondaryBurst_Neurons, NumberNorm_SecondaryBurst_Neurons,NumberNorm_SecondaryBurst,ParentNorm_SecondaryBurst,Amplitude_SecondaryBurst);
 

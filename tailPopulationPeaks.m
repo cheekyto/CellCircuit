@@ -13,7 +13,7 @@ function tailPopulationPeaks = tailPopulationPeaks(units, spikeTimestamp, Popula
 
 %   units(j):   =0, if channel j should be ignored;     =1, if channel j should be incoporated for population activity
 %   bin:       original size of the temporal bin to calculate the population firing rate, in sec        
-%   opt_norm:   =0, No normalization; =1: normalization of the firing rate
+%   opt_norm:   =0, No normalization; =1: normalization of the firing rate; =2: participation (fraction of units with a spike in the bin)
 
 %   PopulationActivityDetection.IndivBurst(k).peak:     temporal location of the peak of event k, in sec 
 %   PopulationActivityDetection.IndivBurst(k).start:    beginning of the event k, in sec
@@ -66,7 +66,9 @@ time_binned = aux.binMidPoint*K_MSEC_SEC;                                       
 spikes_indiv = nan(numel(aux.binMidPoint),n_clusters);                          % matrix to save the binned data
 for i=1:n_clusters                                                              % across all clusters
     aux = bin_spike_time(spikeData(i).timeStamp, bin/K_MSEC_SEC, [range(1)  range(2)]);    
-    if opt_norm
+    if opt_norm == 2
+        spikes_indiv(:,i) = aux.count > 0;                                      % (new, November 2026) participation: the cluster fires in the bin
+    elseif opt_norm
         spikes_indiv(:,i) = aux.normCount;                                      % normalized spike count
     else
         spikes_indiv(:,i) = aux.count;                                          % total spike count per bin

@@ -50,13 +50,15 @@ function NetworkBurstFeatures = NetworkBurstFeatures(NetworkBurstDetected, spike
 % NetworkBurstFeatures.amplitude.cv                    % coefficient of variation of burst amplitude
 % NetworkBurstFeatures.duration.mean                   % mean duration of network burst, in sec 
 % NetworkBurstFeatures.duration.cv                     % coefficient of variation for duration of network burst 
+% NetworkBurstFeatures.duration20.mean, .cv            % (new, November 2026) the same, for the width at 20% of the height of the peak (methods 1-3: = duration)
+% NetworkBurstFeatures.duration50.mean, .cv            % (new, November 2026) the same, for the half-width, at 50% of the height of the peak (method 4: = duration)
 % NetworkBurstFeatures.nSpikes.mean                    % total number of spikes per network burst, per channel 
 % NetworkBurstFeatures.nSpikes.norm                    % total number of spikes in network burst, normalized to the total number of spikes in bursting participating neurons 
 % NetworkBurstFeatures.nSpikes.normTotal               % total number of spikes in network burst, normalized to the total number of spikes across all channels
 % NetworkBurstFeatures.distance.mean                   % distance of the network burst to the individual spike trains, in msec (peak to midpoint) 
 % NetworkBurstFeatures.distance.cv
 % NetworkBurstFeatures.delay.mean                      % distance of the burst start to the first spike of each spike train, in msec 
-% NetworkBurstFeatures.neuronsAct.mean                 % mean number of active neurons within burst normalized to the total number of globally participating neurons
+% NetworkBurstFeatures.neuronsAct.mean                 % mean proportion of the units in "units_participant" (all the participating units, or those of a family) active in each event (comment revised November 2026)
 % NetworkBurstFeatures.neuronsAct.cv                   % coefficient of variation of # active neurons
 % NetworkBurstFeatures.indivMetric(i).nSpikes          % total number of spikes in burst i, per channel
 % NetworkBurstFeatures.indivMetric(i).duration         % duration of the burst i, in sec
@@ -101,6 +103,8 @@ if ~isnan(nBurstTotal) && nBurstTotal>0 && nBurst>0                         % th
     isi_burst = nan(nBurst,1);
     peak_burst = nan(nBurst,1);
     duration_burst = nan(nBurst,1);
+    duration20_burst = nan(nBurst,1);                                       % (new, November 2026) widths at 20% and 50% of the height of the peak
+    duration50_burst = nan(nBurst,1);
     spikes_burst = nan(nBurst,1);
     neurons_burst = nan(nBurst,1);
     distance_burst = nan(nBurst,1);
@@ -143,6 +147,8 @@ if ~isnan(nBurstTotal) && nBurstTotal>0 && nBurst>0                         % th
                     
         NetworkBurstFeatures.indivMetric(k).nSpikes = mean(aux_spikes,'omitnan');                           % total number of spikes in burst idx, per channel
         NetworkBurstFeatures.indivMetric(k).duration = IndivBurst.last - IndivBurst.start;                  % duration of the burst k, in sec
+        NetworkBurstFeatures.indivMetric(k).duration20 = event_width(IndivBurst, 'start20', 'last20');     % (new, November 2026) width at 20% of the peak, in sec
+        NetworkBurstFeatures.indivMetric(k).duration50 = event_width(IndivBurst, 'start50', 'last50');     % (new, November 2026) half-width (50% of the peak), in sec
         NetworkBurstFeatures.indivMetric(k).distance = mean(abs(distance),'omitnan');                       % distance of the network burst idx to the individual spike trains, in msec (peak to midpoint);
         NetworkBurstFeatures.indivMetric(k).isi = mean(isi, 'omitnan');                                     % mean isi in burst k (across all channels), in msec
         NetworkBurstFeatures.indivMetric(k).nNeuronsAct = n_active/nPartNeu;                                % number of active neurons during burst k, normalized to the total number of participating units in this family of network bursts
@@ -152,6 +158,8 @@ if ~isnan(nBurstTotal) && nBurstTotal>0 && nBurst>0                         % th
         
         isi_burst(k) = NetworkBurstFeatures.indivMetric(k).isi;             % mean isi in burst k (across all channels), in msec
         duration_burst(k) = NetworkBurstFeatures.indivMetric(k).duration;   % duration of the burst k, in sec
+        duration20_burst(k) = NetworkBurstFeatures.indivMetric(k).duration20;
+        duration50_burst(k) = NetworkBurstFeatures.indivMetric(k).duration50;
         spikes_burst(k) = NetworkBurstFeatures.indivMetric(k).nSpikes;      % total number of spikes in event k              
         neurons_burst(k) = NetworkBurstFeatures.indivMetric(k).nNeuronsAct; % normalized number of active neurons during burst k
         distance_burst(k) = NetworkBurstFeatures.indivMetric(k).distance;   % distance of the network burst k to the individual spike trains, in msec (peak to midpoint)    
@@ -208,10 +216,14 @@ if ~isnan(nBurstTotal) && nBurstTotal>0 && nBurst>0                         % th
     NetworkBurstFeatures.amplitude.cv = std(isi_burst,'omitnan')/mean(isi_burst,'omitnan');
     NetworkBurstFeatures.duration.mean = mean(duration_burst,'omitnan');
     NetworkBurstFeatures.duration.cv = std(duration_burst,'omitnan')/mean(duration_burst,'omitnan');
+    NetworkBurstFeatures.duration20.mean = mean(duration20_burst,'omitnan');                       % (new, November 2026)
+    NetworkBurstFeatures.duration20.cv = std(duration20_burst,'omitnan')/mean(duration20_burst,'omitnan');
+    NetworkBurstFeatures.duration50.mean = mean(duration50_burst,'omitnan');
+    NetworkBurstFeatures.duration50.cv = std(duration50_burst,'omitnan')/mean(duration50_burst,'omitnan');
     NetworkBurstFeatures.nSpikes.mean = mean(spikes_burst,'omitnan');           % total number of spikes per network burst, per neuron 
     NetworkBurstFeatures.nSpikes.norm = mean(spikes_burst,'omitnan')*nBurst/(spikes_neuron_netBursting/nPartNeu);  % total number of spikes in network burst, normalized to the total number of spikes in bursting participating neurons 
     NetworkBurstFeatures.nSpikes.normTotal = mean(spikes_burst,'omitnan')*nBurst*nPartNeu/spikes_neuron_total;     % total number of spikes in network burst, normalized to the total number of spikes across all channels
-    NetworkBurstFeatures.neuronsAct.mean = mean(neurons_burst,'omitnan');       % number of active neurons within burst normalized to the total number of globally participating neurons
+    NetworkBurstFeatures.neuronsAct.mean = mean(neurons_burst,'omitnan');       % proportion of the units in "units_participant" active in each event (comment revised November 2026)
     NetworkBurstFeatures.neuronsAct.cv = std(neurons_burst,'omitnan')/mean(neurons_burst,'omitnan');      
     NetworkBurstFeatures.distance.mean = mean(distance_burst,'omitnan');        % distance of the network burst to the individual spike trains, in msec (peak to midpoint)
     NetworkBurstFeatures.distance.cv = std(distance_burst,'omitnan')/mean(distance_burst,'omitnan');      
@@ -248,6 +260,10 @@ else
     NetworkBurstFeatures.amplitude.cv = [];
     NetworkBurstFeatures.duration.mean = [];
     NetworkBurstFeatures.duration.cv = [];
+    NetworkBurstFeatures.duration20.mean = [];
+    NetworkBurstFeatures.duration20.cv = [];
+    NetworkBurstFeatures.duration50.mean = [];
+    NetworkBurstFeatures.duration50.cv = [];
     NetworkBurstFeatures.nSpikes.mean = [];
     NetworkBurstFeatures.nSpikes.norm = [];
     NetworkBurstFeatures.nSpikes.normTotal = [];
@@ -280,6 +296,18 @@ if opt_secondary
         NetworkBurstFeatures.PrimarywithSecondary = [];
         NetworkBurstFeatures.SecondaryperPrimary = [];
     end
+end
+
+end
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+function width = event_width(IndivBurst, field_start, field_last)
+
+% width of an event between two of its edges, in sec (NaN when the detection did not provide them) (new, November 2026)
+
+width = nan;
+if isfield(IndivBurst, field_start) && isfield(IndivBurst, field_last) && ~isempty(IndivBurst.(field_start)) && ~isempty(IndivBurst.(field_last))
+    width = IndivBurst.(field_last) - IndivBurst.(field_start);
 end
 
 end
