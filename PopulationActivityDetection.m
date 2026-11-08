@@ -73,6 +73,9 @@ SECONDARY_NOISE_TAIL = 1;                       % (new, November 2026; user's ch
                                                 % 1 = standard deviation of the search window without the decay of the large event at its start (until the
                                                 % signal first falls to the median of the window, as the tails of the large events); 0 = standard deviation of
                                                 % the whole window (before), which that decay inflated (default: 1)
+REFINE_OWN_PEAK = 1;                            % (new, November 2026; user's choice) methods 1-3: 1 = an event whose refined peak landed on another event (outside
+                                                % its own window: the extended window of "refinePeakDetection" reached a higher neighbour) is refined again
+                                                % with its peak kept inside its own window; 0 = as before (the event became a copy of its neighbour) (default: 1)
 
 % (new, November 2026) option 4 of "NetworkBurstDetection" (opt_norm = 2): participation signal with a surrogate threshold
 N_SURROGATE = 1000;                             % number of surrogates; each unit is circularly shifted by an independent random offset (default: 1000)
@@ -371,6 +374,26 @@ if n_peaks_final>0
         level(k) = IndBurst(sm_optimal).level(k);                   % level of the event k (=0, small event; =1, large event)  
         start20(k) = peakCharact.start20;   last20(k) = peakCharact.end20;  % (new, November 2026) edges at 20% and 50% of the height of the peak
         start50(k) = peakCharact.start50;   last50(k) = peakCharact.end50;
+    end
+    % (new, November 2026; user's choice) the refinement searches the peak in the window of the event extended by half its width on each side. A
+    % broad event next to a higher one (e.g., a small event 2-4 s after a large one) could take the peak and the edges of its neighbour: the same
+    % event was then reported twice, and the event itself was lost. Only such an event (refined peak outside its own window and inside another
+    % event) is refined again, with its peak kept inside its own window; the other events are not changed
+    if REFINE_OWN_PEAK && ~use_surrogate && n_peaks_final > 1
+        start0 = start;     last0 = last;                                   % edges of all the events before this correction
+        for k=1:n_peaks_final
+            cand = IndBurst(sm_optimal).members{k};
+            own = [time_binned(min(cand.startIdx)) + bin/2, time_binned(max(cand.endIdx)) - bin/2];   % its own window (as "characterizeEvent")
+            others = [1:k-1, k+1:n_peaks_final];
+            if (peak(k) < own(1) || peak(k) > own(2)) && any(peak(k) >= start0(others) & peak(k) <= last0(others))
+                peakCharact = characterizeEvent(units, spikeTimestamp, time_binned, bin, cand.startIdx, cand.endIdx, cand.best, START_LEVEL, END_LEVEL, ...
+                    opt_norm, opt_plot, spike_merged, true);
+                peak(k) = peakCharact.peak;     peakAmp(k) = peakCharact.peakAmp;
+                start(k) = peakCharact.start;   last(k) = peakCharact.end;
+                start20(k) = peakCharact.start20;   last20(k) = peakCharact.end20;
+                start50(k) = peakCharact.start50;   last50(k) = peakCharact.end50;
+            end
+        end
     end
     label_size = PopulationActivitySize(units, spikeTimestamp, start/K_MSEC_SEC, last/K_MSEC_SEC, 1);
 

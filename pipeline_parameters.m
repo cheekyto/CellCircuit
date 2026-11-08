@@ -308,6 +308,7 @@ P.PopulationActivityDetection.TAIL_FACTOR = 3;                  % (new, November
 P.PopulationActivityDetection.NOISE_ROBUST = 1;                 % (new, November 2026) noise of the second round (small events): 1 = 1.4826 x median absolute deviation; 0 = standard deviation (default: 1)
 P.PopulationActivityDetection.NOISE_FLOOR_SD = 0.25;            % (new, November 2026) floor of the robust noise, as a proportion of the standard deviation (default: 0.25)
 P.PopulationActivityDetection.SECONDARY_NOISE_TAIL = 1;         % (new, November 2026) search of secondary events: noise = SD of the window without the decay of the large event; 0 = SD of the whole window, as before (default: 1)
+P.PopulationActivityDetection.REFINE_OWN_PEAK = 1;              % (new, November 2026) an event whose refined peak landed on another event is refined again inside its own window; 0 = as before (default: 1)
 % PopulationActivityDetection: option 4 of NetworkBurstDetection (new, November 2026; participation signal, thresholds from surrogates)
 P.PopulationActivityDetection.N_SURROGATE = 1000;               % number of surrogates; each unit is circularly shifted by an independent random offset (default: 1000)
 P.PopulationActivityDetection.SURROGATE_SEED = 0;               % seed of the random offsets (the same seed gives the same surrogates)

@@ -1,4 +1,4 @@
-function refinePeakDetection = refinePeakDetection(units, spikeTimestamp, ini0, fin0, bin0, start_level, end_level, opt_norm, opt_plot, spike_merged)
+function refinePeakDetection = refinePeakDetection(units, spikeTimestamp, ini0, fin0, bin0, start_level, end_level, opt_norm, opt_plot, spike_merged, peak_inside)
 
 test = 0; 
 
@@ -22,6 +22,9 @@ test = 0;
 %   end_level:  proportion of the peak amplitude of the network burst to identifity the ending point
 %   opt_norm:   =0, No normalization; =1: normalization of the firing rate; =2: participation (fraction of units with a spike in the bin)
 %   spike_merged:   (optional) output of "mergeSpikeTrains(units, spikeTimestamp)"; PopulationActivityDetection builds it once for all the peaks
+%   peak_inside:    (optional, new November 2026) true = the peak is searched inside the event (ini0 to fin0), and the window extended by
+%                   WINDOW_FACTOR is used only for the edges; false (default) = the highest peak of the extended window. "PopulationActivityDetection"
+%                   uses it only for an event whose peak had landed on another event (see REFINE_OWN_PEAK there)
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%   OUTPUT   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -49,6 +52,9 @@ apply_parameters('refinePeakDetection');                                    % (r
 
 if nargin < 10 || isempty(spike_merged)                                    % (revised October 2026) spike trains of the selected clusters, merged and sorted
     spike_merged = mergeSpikeTrains(units, spikeTimestamp);
+end
+if nargin < 11 || isempty(peak_inside)
+    peak_inside = false;
 end
 n_clusters = spike_merged.n_clusters;                                       % total number of clusters
 
@@ -104,8 +110,23 @@ smoothedSpikes = smoothdata(spikes, 'gaussian', smoothWindow);                  
 %%%     Identify the supra-threshold time points
 
 [pks, locs, widths, proms] = findpeaks(smoothedSpikes);
+% (new, November 2026; user's choice) with "peak_inside", the peak of the event is searched inside the event (ini0 to fin0), and the window
+% extended by WINDOW_FACTOR on each side is used only for its edges. Without it (default, as before), the highest peak of the extended window:
+% a broad small event on the tail of a large event (2-4 s after it) could take the peak and the edges of the large event (a duplicate)
+inside_bins = [];
+if peak_inside
+    inside_bins = find(time_binned(:) >= ini0 & time_binned(:) <= fin0);
+    if ~isempty(inside_bins)
+        in_event = ismember(locs, inside_bins);
+        pks = pks(in_event);    locs = locs(in_event);   widths = widths(in_event);   proms = proms(in_event);
+    end
+end
 
-if numel(pks)>0
+if numel(pks)==0 && ~isempty(inside_bins)                                   % no local maximum inside the event: its highest point
+    [peak, j] = max(smoothedSpikes(inside_bins));
+    idx_peak = inside_bins(j);
+    amplitude = peak;
+elseif numel(pks)>0
     if numel(pks)>1
        [~, aux] = max(pks);
        idx_peak = locs(aux);
