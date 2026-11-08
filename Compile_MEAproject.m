@@ -34,7 +34,8 @@ group = 'groupA';
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%   PARAMETERS   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-MIN_NETBURST = 1/200;                      % minimum rate of network burst events, in # per sec (default: 1/150); it is applied to each family of events
+MIN_NETBURST = 1/210;                      % minimum rate of network burst events, in # per sec (default: 1/150); it is applied to each family of events
+                                           % (revised November 2026: 1/200 -> 1/210, so that a family of 3 events in a 600-s window is measured)
                                            % (revised October 2026: 1/300 -> 1/200; before, this value was not used -only in the disabled block "if 0" below- and 
                                            %  "Compile_NetBurstResults" used its own value, 1/150). Below it, the metrics stay NaN, but the number of events is reported
 MIN_SECONDARY_RATE = 0.5;                  % minimum average number of secondary peaks per primary event (default: 0.5)
@@ -221,7 +222,8 @@ for i=1:n_recordings                                                        % ac
         NETbursting1 = vertcat(NETbursting1, Compile_NetBurstResult);
         % option = 2
         if PerCondition(k).NetworkBurstDetected.nBurst > 0
-            n_cluster = numel(unique(PerCondition(k).NetworkBurstDetected.clustering.label(1:PerCondition(k).NetworkBurstDetected.nBurst,1)));  % number of families of primary events
+            n_cluster = numel(primaryFamilies(PerCondition(k).NetworkBurstDetected.clustering.label(1:PerCondition(k).NetworkBurstDetected.nBurst,1)));  % number of families of primary events
+                                                                            % (revised November 2026: without the events in no family, label 0; see "primaryFamilies")
             ttxQC_array = ones(n_cluster,1)*ttx;                            % (revised October 2026: before, "clustering.n_cluster", which also counts the secondary-only families)
         else
             n_cluster = 1;
@@ -387,10 +389,11 @@ file_output_excel = fullfile(folderPath, sprintf('%s_Compiled.xlsx', group));
 
 % units of each column, written in the first row of each sheet (revised October 2026: defined once; the rows of "Bursting" -one extra empty cell- 
 % and of the network bursting tables -"#" on the 7th to 9th columns instead of the 6th, 7th and 9th- were shifted; "OnsetCV" and "PeakCV" are 
-% standard deviations, in msec; revised October 2026: column "Clustering_Quality" after "Number_clusters_Netburst")
+% standard deviations, in msec; revised October 2026: column "Clustering_Quality" after "Number_clusters_Netburst"; revised November 2026: column
+% "Family_Type" after "label_cluster_Netburst")
 units_firing = {'','','','','','sec', 'sec', '#','#','#','Hz','ad','ad','msec','ad','#/window','ad','ad','ad','ad'};    % (revised October 2026: CV and Fano factors)
 units_bursting = {'','','','','','norm', 'norm', '1/min','ad','ad','ad','sec','ad','#/window','sec','ad','1/sec','ad','ad','ad','msec','norm','1/sec','ad','ad','ad','msec','norm','1/sec','ad','ad','ad','msec'};
-units_netbursting = {'','','','','','#','#','','','#','norm','#','norm','norm','norm','ad','1/min','ad','ad','sec','ad','#/window','sec','ad','sec','ad','sec','ad','ad','ad','1/sec','ad','msec','ad','#','msec','msec','msec','msec','ad','Hz','ad','#','norm','#/primary','ad','Hz'};
+units_netbursting = {'','','','','','#','#','','','','#','norm','#','norm','norm','norm','ad','1/min','ad','ad','sec','ad','#/window','sec','ad','sec','ad','sec','ad','ad','ad','1/sec','ad','msec','ad','#','msec','msec','msec','msec','ad','Hz','ad','#','norm','#/primary','ad','Hz'};
 
 writetable(Firing, file_output_excel,'Sheet','Firing','Range','A2',"WriteMode",'replacefile')
 writecell(units_firing,file_output_excel,'Sheet','Firing','Range','A1')

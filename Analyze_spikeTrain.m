@@ -349,8 +349,14 @@ end
 % (revised October 2026) report the number of families of network burst events and the quality of the clustering, to know how much weight to put on it
 % (quality_clustering, saved as NetworkBurstDetected.clustering.clusteringQuality; see "cluster_neuronal_events")
 if isstruct(NetworkBurstDetected.clustering) && isfield(NetworkBurstDetected.clustering, 'clusteringQuality')
-    fprintf("\n Clustering of the network burst events: %g families, quality_clustering = %g \n", NetworkBurstDetected.clustering.n_cluster, NetworkBurstDetected.clustering.clusteringQuality);
-    fprintf("   (2 = reliable; 1 = it seems to work, but the bootstrap and the permutation test do not give a clear answer; 0 = not significant, single family; NaN = not run) \n");
+    % (revised November 2026) also the events in no family (label 0) and the stability of each family; quality_clustering is now the
+    % stability of the least stable family (see "cluster_neuronal_events")
+    fprintf("\n Clustering of the network burst events: %g families, %g events in no family, quality_clustering = %.2f \n", NetworkBurstDetected.clustering.n_cluster, ...
+        sum(NetworkBurstDetected.clustering.label(:,1) == 0), NetworkBurstDetected.clustering.clusteringQuality);
+    if isfield(NetworkBurstDetected.clustering, 'stability')
+        fprintf("   stability of each family (0 to 1): %s \n", mat2str(round(NetworkBurstDetected.clustering.stability(:)', 2)));
+    end
+    fprintf("   (quality_clustering: stability of the least stable family, the mean proportion of resamples of the units in which two of its events stay together; 0 = no family; NaN = not run) \n");
 else
     fprintf("\n No clustering of the network burst events (no network bursting): quality_clustering = NaN \n");
 end
@@ -375,7 +381,9 @@ if ~isnan(nNetBurst1) && nNetBurst1 > 0
             
             channels_part = NetworkBurstDetected.Channels(:,1);
             cluster1 = NetworkBurstDetected.clustering.label(1:nNetBurst1,1);
-            aux_cluster = unique(cluster1);
+            aux_cluster = primaryFamilies(cluster1);                        % (revised November 2026) families of primary events, then one group with
+                                                                            % the remaining events, in no family (label 0), if any
+                                                                            % (before, "unique(cluster1)"; see "primaryFamilies")
             nFamilies = numel(aux_cluster);
             for k=1:nFamilies
                 netburst_member_k = (cluster1 == aux_cluster(k));
@@ -463,20 +471,29 @@ if print_Plots
 
             case 2
                     
+                % (revised November 2026) the colors repeat after 4 families (there is no maximum number of families any more); the remaining
+                % primary events, in no family (label 0, the last group), are grey
+                label1 = NetworkBurstDetected.clustering.label(1:nNetBurst1,1);
+                [~, n_real_families] = primaryFamilies(label1);
                 for k=1:nFamilies
-                    label1 = NetworkBurstDetected.clustering.label(1:nNetBurst1,1);
                     member_k = find((label1 == aux_cluster(k)));
+                    color_k = colors_event{mod(k-1, numel(colors_event)-1)+1};
+                    edge_k = 'auto';
+                    if aux_cluster(k) == 0
+                        color_k = [0.6 0.6 0.6];
+                        edge_k = [0.4 0.4 0.4];
+                    end
                     for i=1:numel(member_k)
                         idx = member_k(i);
-                        plot(NetworkBurstDetected.IndivBurst(idx).peak, NetworkBurstDetected.IndivBurst(idx).peakAmp*1.1,'o', 'MarkerFaceColor',colors_event{k}); hold on
+                        plot(NetworkBurstDetected.IndivBurst(idx).peak, NetworkBurstDetected.IndivBurst(idx).peakAmp*1.1,'o', 'MarkerFaceColor',color_k, 'MarkerEdgeColor',edge_k); hold on
                     end
                 end
                 if nNetBurst2 > 0
                     for i=1:nNetBurst2
-                        plot(NetworkBurstDetected.Secondary.IndivBurst(i).peak, NetworkBurstDetected.Secondary.IndivBurst(i).peakAmp*1.5,'o', 'MarkerFaceColor',colors_event{k+1}); hold on
+                        plot(NetworkBurstDetected.Secondary.IndivBurst(i).peak, NetworkBurstDetected.Secondary.IndivBurst(i).peakAmp*1.5,'o', 'MarkerFaceColor',colors_event{end}); hold on
                     end
                 end
-                title(sprintf('%g primary clusters + %g secondary events', nFamilies, nNetBurst2));
+                title(sprintf('%g families of primary events (%g events in none, grey) + %g secondary events', n_real_families, sum(label1 == 0), nNetBurst2));
 
             end
     else

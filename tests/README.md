@@ -14,6 +14,7 @@ These scripts check that a revised version of the pipeline gives the **same resu
 | `test_core_functions.m` | Function-level test of `BurstDetection`, `BurstFeatures`, `lvr` and `Reshape_spikeTimestamp` on every cluster of a recording plus synthetic edge cases (run it with each version, then compare with `compare_outputs`) |
 | `test_spike_features.m` | Function-level test of `SpikeFeatures` (entropy, mutual information, STTC, LV) on the clusters of an analysis window, same procedure |
 | `test_hypersynch_functions.m` | Function-level test of `HyperSyncPair` (random pairs + edge cases) and `ShuffleSpikeTrain` (methods 1, 2 and 3), same procedure |
+| `test_family_clustering.m` | Self-check of the families of network burst events (`cluster_neuronal_events`, `primaryFamilies`, November 2026) on synthetic spike trains: participating units of each event (planted units found, none in a long event without ensemble), one family per repeated ensemble, no family for an ensemble seen twice, stability, reproducibility (no reference recording needed) |
 
 ## How to use
 

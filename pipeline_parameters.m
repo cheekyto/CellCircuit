@@ -173,7 +173,7 @@ P.Analyze_spikeTrain.opt_distance = 0;                          % option to remo
 P.Analyze_spikeTrain.opt_clusterAgain = 0;                      % option to re-run the clustering of network bursting events
 P.Analyze_spikeTrain.BURST_DETECT_METHOD = 1;                   % algorithm to be used for individual burst detection
                                                                 %  =1       Maximal Interval
-P.Analyze_spikeTrain.NETWORK_BURST_DETECT_METHOD = 3;           % algorithm to be used for newtork burst detection
+P.Analyze_spikeTrain.NETWORK_BURST_DETECT_METHOD = 5;           % algorithm to be used for newtork burst detection (revised November 2026: 3 -> 5)
                                                                 %  =1       Population firing rate
                                                                 %  =2       looking for peaks, combining the regular population firing rate and the normalized population firing; and using a progressive narrowing of the binSize
                                                                 %  =3       option 2 + clustering
@@ -428,16 +428,21 @@ P.clusterNetburst.MIN_PRIMARY_EVENTS = 4;                       % the clustering
 % cluster_neuronal_events
 P.cluster_neuronal_events.N_SCALAR = 7;
 P.cluster_neuronal_events.MIN_SECONDARY_EVENTS = 5;             % minimum number of secondary events to include them
-P.cluster_neuronal_events.MIN_SIZE_CLUSTER = 0;                 % minimum size of the clusters to run the boostrapping (default: 3)
 P.cluster_neuronal_events.colors_event = {'r', 'b', 'c', 'g', 'm'};
-P.cluster_neuronal_events.w_scalar = 0.35;                      % (default: 0.35)
-P.cluster_neuronal_events.w_population = 0.65;                  % (default: 0.65)
-P.cluster_neuronal_events.MAX_K = 4;                            % maximum number of clusters to evaluate (default: 4)
-P.cluster_neuronal_events.LINKAGE_METHOD = 'ward';              % 'ward' | 'average' | 'complete' | 'single'
-P.cluster_neuronal_events.ALPHA = 0.05;                         % significance threshold (default: 0.05)
-P.cluster_neuronal_events.MIN_DIFF = 0.10;                      % maximum difference in "vote_frac" and "silhouette score" to consider to k-sizes non-different (default: 0.10)
-P.cluster_neuronal_events.SIL_THRESHOLD = 0.40;                 % AND have a mean silhouette >= 0.25 (0.25 is a modest but non-trivial structure threshold) (the higher the value, the more conservative)
+P.cluster_neuronal_events.w_scalar = 0.35;                      % weight of the 7 scalar metrics in the composite distance (default: 0.35)
+P.cluster_neuronal_events.w_population = 0.65;                  % weight of the participating units in the composite distance (default: 0.65)
+P.cluster_neuronal_events.PARTICIPATION_ALPHA = 0.01;           % (new, November 2026) a unit participates in an event when the probability of firing as many spikes by chance
+                                                                % (Poisson, with its rate outside the events) is below this value (default: 0.01)
+P.cluster_neuronal_events.PARTICIPATION_MIN_SPIKES = 2;         % (new, November 2026) and it fires at least this number of spikes within the event (default: 2)
+P.cluster_neuronal_events.LINKAGE_METHOD = 'average';           % (revised November 2026) linkage of the tree of the composite distance (before: 'ward', on an MDS projection)
+P.cluster_neuronal_events.MIN_SIMILARITY = 0.50;                % (new, November 2026) the events of a family are, on average, at least this similar (1 - composite distance) (default: 0.50)
+P.cluster_neuronal_events.MIN_FAMILY_EVENTS = 3;                % (new, November 2026) minimum number of events of a family; the events of smaller groups belong to no family (default: 3)
+P.cluster_neuronal_events.N_RESAMPLE = 200;                     % (new, November 2026) resamples of the participating units to measure the stability of each family (default: 200)
+P.cluster_neuronal_events.RESAMPLE_SEED = 0;                    % (new, November 2026) seed of the resamples (the same seed gives the same result)
+% (revised November 2026) MIN_SIZE_CLUSTER, MAX_K, ALPHA, MIN_DIFF and SIL_THRESHOLD were removed: they chose the number of families (2 to MAX_K)
+% with the bootstrap and the permutation test, which are no longer used (the families come from the cut at MIN_SIMILARITY)
 
+% bootstrap_optimal_k, permutation_test_clustering and safe_linkage: not used since November 2026 (see "cluster_neuronal_events")
 % bootstrap_optimal_k
 P.bootstrap_optimal_k.RNG_SEED = 0;                             % seed for the random number generator (change it to get a different, but still reproducible, result)
 P.bootstrap_optimal_k.N_BOOT = 1000;                            % number of bootstrap resamples (>= 1000 recommended)
@@ -473,7 +478,8 @@ P.NetworkBurstStructure.MIN_BURST_PLOT = 3;
 %%  8) Compile_MEAproject (per group)
 
 % Compile_MEAproject
-P.Compile_MEAproject.MIN_NETBURST = 1/200;                      % minimum rate of network burst events, in # per sec (default: 1/150); it is applied to each family of events
+P.Compile_MEAproject.MIN_NETBURST = 1/210;                      % minimum rate of network burst events, in # per sec (default: 1/150); it is applied to each family of events
+                                                                % (revised November 2026: 1/200 -> 1/210, so that a family of 3 events in a 600-s window is measured)
                                                                 % (revised October 2026: 1/300 -> 1/200; before, this value was not used -only in the disabled block "if 0" below- and
                                                                 %  "Compile_NetBurstResults" used its own value, 1/150). Below it, the metrics stay NaN, but the number of events is reported
 P.Compile_MEAproject.MIN_SECONDARY_RATE = 0.5;                  % minimum average number of secondary peaks per primary event (default: 0.5)
