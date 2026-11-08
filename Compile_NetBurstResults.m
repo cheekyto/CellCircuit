@@ -11,7 +11,8 @@ function Compile_NetBurstResults = Compile_NetBurstResults(n_cluster, cond_idx, 
 %   thresholds:     (optional, revised October 2026) structure with the fields MIN_NETBURST, MIN_SECONDARY_RATE and MIN_PARENT (set in "Compile_MEAproject");
 %                   without it, the values below are used
 
-MIN_NETBURST = 1/200;                      % minimum rate of network burst events, in # per sec (default: 1/150) (revised October 2026: 1/150 -> 1/200)
+MIN_NETBURST = 1/210;                      % minimum rate of network burst events, in # per sec (default: 1/150) (revised October 2026: 1/150 -> 1/200;
+                                           % revised November 2026: 1/200 -> 1/210, so that a family of 3 events in a 600-s window is measured)
 MIN_SECONDARY_RATE = 0.5;                  % minimum average number of secondary peaks per primary event (default: 0.5)
 MIN_PARENT = 0.25;                         % minimum proportion of primary peaks with secondary peaks (default: 0.25)
 if nargin >= 7 && ~isempty(thresholds)     % (revised October 2026) the values set in "Compile_MEAproject" (a single place for the thresholds)
@@ -44,18 +45,22 @@ nNetBurst2 = NetworkBurstDetected.Secondary.nBurst;
 % events (k = 1..n_families) and NetworkBurstFeature{n_families+1} are the secondary events. "clustering.n_cluster" also counts the families 
 % with only secondary events, so it can be larger than n_families (before, it was used instead of n_families: the secondary events were 
 % compiled as a primary family and the secondary features were read from a wrong index, which crashed)
-families = 1;   n_families = 1;
+families = 1;   n_families = 1;   n_real_families = 1;
 if NetworkBurstDetected.nBurst > 0
     cluster1 = NetworkBurstDetected.clustering.label(1:nNetBurst1,1);       % family of each primary event
-    families = unique(cluster1);                                            % families with primary events
-    n_families = numel(families);
+    [families, n_real_families] = primaryFamilies(cluster1);                % (revised November 2026) families with primary events, then one group with the
+                                                                            % remaining events, in no family (label 0), if any (before, "unique(cluster1)";
+                                                                            % see "primaryFamilies")
+    n_families = numel(families);                                           % number of groups of primary events (rows of option 2)
 end
 
 % Identify the primary cluster (cluster with the most number of events)
+% (revised November 2026) only among the real families: the group of the remaining events (label 0, the last one) is chosen only when
+% there is no family
 idx_cluster = 1;
 if option == 1 && NetworkBurstDetected.nBurst > 0
     for i=2:n_families
-        if PerCondition(cond_idx).NetworkBurstFeature{1,i}.nBurst > PerCondition(cond_idx).NetworkBurstFeature{1,idx_cluster}.nBurst
+        if families(i) > 0 && PerCondition(cond_idx).NetworkBurstFeature{1,i}.nBurst > PerCondition(cond_idx).NetworkBurstFeature{1,idx_cluster}.nBurst
             idx_cluster = i;
         end
     end
@@ -95,8 +100,12 @@ PeakFire_NETburst = nan(n_cluster,1);
 PeakFireNorm_NETburst = nan(n_cluster,1);
 Number_clusters_Netburst = nan(n_cluster,1);                      % number of families found from the primary peaks
 Clustering_Quality = nan(n_cluster,1);                            % (revised October 2026) quality of the clustering ("quality_clustering" in "cluster_neuronal_events"):
-                                                                  % =2, reliable; =1, it seems to work (bootstrap / permutation not clear); =0, not significant; NaN, not run
+                                                                  % (revised November 2026) stability of the least stable family (0 to 1); =0, no family; NaN, not run
+                                                                  % (before: =2, reliable; =1, it seems to work (bootstrap / permutation not clear); =0, not significant)
 label_cluster_Netburst = nan(n_cluster,1);          
+Family_Type = repmat({''}, n_cluster, 1);                         % (new, November 2026) "family"; "remaining events (no family)" for the row of the events in no family 
+                                                                  % (label 0: not a family, see "primaryFamilies"); "all events" for option 0; "no network bursting"
+                                                                  % when the condition has no primary event
 
 Number_SecondaryBurst_Neurons = nan(n_cluster,1);
 NumberNorm_SecondaryBurst_Neurons = nan(n_cluster,1);
@@ -119,11 +128,14 @@ for k=1:n_cluster                                                           % ac
             Number_NETburst_Events(k) = NetworkBurstDetected.nBurst;                 % total number of network burst events
             NetworkBurstStructur = PerCondition(cond_idx).NetworkBurstStructure;
             label_cluster_Netburst(k) = nan;
+            Family_Type{k} = 'all events';
+            if ~(NetworkBurstDetected.nBurst > 0), Family_Type{k} = 'no network bursting'; end
 
         case 1  % only the first primary cluster
             NetworkBurstFeature = PerCondition(cond_idx).NetworkBurstFeature{1, idx_cluster}; % primary cluster (idx_cluster)
             Number_NETburst_Events(k) = NetworkBurstFeature.nBurst;                 % total number of network burst events
             label_cluster_Netburst(k) = families(idx_cluster);                     % (revised October 2026: label of the family, not its position)
+            Family_Type{k} = family_type(families(idx_cluster), NetworkBurstDetected.nBurst);   % (new, November 2026)
             % prepare and run NetworkBurstStructure for the primary cluster
             if nNetBurst1 > 0
                 netburst_member = (cluster1 == families(idx_cluster));                  % events corresponding to the cluster "idx_cluster"
@@ -142,6 +154,7 @@ for k=1:n_cluster                                                           % ac
             NetworkBurstFeature = PerCondition(cond_idx).NetworkBurstFeature{1, k}; % information for cluster k
             Number_NETburst_Events(k) = NetworkBurstFeature.nBurst;                 % total number of network burst events
             label_cluster_Netburst(k) = families(k);                                % (revised October 2026: label of the family, not its position)
+            Family_Type{k} = family_type(families(k), NetworkBurstDetected.nBurst);       % (new, November 2026)
 
             % prepare and run NetworkBurstStructure for the cluster ksize
             if nNetBurst1 > 0
@@ -208,8 +221,9 @@ for k=1:n_cluster                                                           % ac
             PeakFireNorm_NETburst(idx) = PeakFire_NETburst(idx)/Amplitude_NETburst(idx);
             end
 
-            Number_clusters_Netburst(idx) = n_families;                                 % number of families found from the primary peaks (revised October 2026: 
+            Number_clusters_Netburst(idx) = n_real_families;                            % number of families found from the primary peaks (revised October 2026: 
                                                                                         %  before, "clustering.n_cluster", which also counts the secondary-only families)
+                                                                                        % (revised November 2026: without the events in no family; 0 if there is no family)
 
             %%% Assessment of secondary events  %%%
             if NetworkBurstDetected.nBurst_level1 > 0 && nNetBurst2/NetworkBurstDetected.nBurst_level1 > MIN_SECONDARY_RATE
@@ -238,10 +252,24 @@ for k=1:n_cluster                                                           % ac
         clear NetworkBurstFeature Feature_secondary NetworkBurstStructur 
 end
 
-NETbursting = table(Organoid, File, ttx_qc, Condition, dose, Number_NETburst_Events, Number_clusters_Netburst, Clustering_Quality, label_cluster_Netburst, Number_NETburst_Neurons, NumberNorm_NETburst_Neurons, Number_Spikes_NETburst, NumberNorm_Spikes_NETburst, NumberNorm_SpikesTotal_NETburst, ...
+NETbursting = table(Organoid, File, ttx_qc, Condition, dose, Number_NETburst_Events, Number_clusters_Netburst, Clustering_Quality, label_cluster_Netburst, Family_Type, Number_NETburst_Neurons, NumberNorm_NETburst_Neurons, Number_Spikes_NETburst, NumberNorm_Spikes_NETburst, NumberNorm_SpikesTotal_NETburst, ...
                     Participation_NETburst, ParticipationCV_NETburst, Rate_NETburst, RateCV_NETburst, FFibi_CV2_NETburst, FFibi_VarMean_NETburst, FFcount_NETburst, MeanCount_NETburst, Duration_NETburst, DurationCV_NETburst, Duration20_NETburst, Duration20CV_NETburst, Duration50_NETburst, Duration50CV_NETburst, Tail_NETburst, TailCV_NETburst, Amplitude_NETburst, AmplitudeCV_NETburst, ...
                     Distance_NETburst, DistanceCV_NETburst, tempStructNeuron_NETburst, Onset_NETburst, OnsetCV_NETburst, Peak_NETburst, PeakCV_NETburst, Correlation_NETburst, ...
                     PeakFire_NETburst, PeakFireNorm_NETburst, Number_SecondaryBurst_Neurons, NumberNorm_SecondaryBurst_Neurons,NumberNorm_SecondaryBurst,ParentNorm_SecondaryBurst,Amplitude_SecondaryBurst);
 
 Compile_NetBurstResults = NETbursting;
+end
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+function text = family_type(label, n_events)
+
+% (new, November 2026) type of a row of the per-family results: a family (label 1, 2, ...), or the remaining events, which belong to no
+% family (label 0, see "primaryFamilies"); "no network bursting" when the condition has no primary event (its row has label 1 by default)
+if ~(n_events > 0)
+    text = 'no network bursting';
+elseif label == 0
+    text = 'remaining events (no family)';
+else
+    text = 'family';
+end
 end
