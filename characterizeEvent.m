@@ -1,4 +1,4 @@
-function event = characterizeEvent(units, spikeTimestamp, time_binned, bin, start_idx, end_idx, best, start_level, end_level, opt_norm, opt_plot, spike_merged)
+function event = characterizeEvent(units, spikeTimestamp, time_binned, bin, start_idx, end_idx, best, start_level, end_level, opt_norm, opt_plot, spike_merged, peak_inside)
 
 % (new, November 2026) characterization of one event of options 1-3 of "NetworkBurstDetection" from its candidates (one, or several merged
 % because their edges overlap). It is the code of "PopulationActivityDetection", moved here so that the events added by option 5 (large events
@@ -19,6 +19,8 @@ function event = characterizeEvent(units, spikeTimestamp, time_binned, bin, star
 %   opt_norm:           =0, no normalization; =1, normalized firing rate; =2, participation
 %   opt_plot:           plots of "refinePeakDetection"
 %   spike_merged:       (optional) output of "mergeSpikeTrains(units, spikeTimestamp)", to build it once for many events
+%   peak_inside:        (optional, new November 2026) true = the peak of each candidate is searched inside the candidate (see "refinePeakDetection");
+%                       default false, as before
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%   OUTPUT   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -31,15 +33,18 @@ function event = characterizeEvent(units, spikeTimestamp, time_binned, bin, star
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-if nargin < 12
+if nargin < 12 || isempty(spike_merged)
     spike_merged = mergeSpikeTrains(units, spikeTimestamp);
+end
+if nargin < 13
+    peak_inside = false;
 end
 cand_start = time_binned(start_idx) + bin/2;                                % edges of the candidates, in sec
 cand_end = time_binned(end_idx) - bin/2;
 n_cand = numel(start_idx);
 s_c = nan(n_cand,1);    e_c = nan(n_cand,1);    s50_c = nan(n_cand,1);  e50_c = nan(n_cand,1);
 for c=1:n_cand
-    refined = refinePeakDetection(units, spikeTimestamp, cand_start(c), cand_end(c), bin, start_level, end_level, opt_norm, opt_plot, spike_merged);
+    refined = refinePeakDetection(units, spikeTimestamp, cand_start(c), cand_end(c), bin, start_level, end_level, opt_norm, opt_plot, spike_merged, peak_inside);
     s_c(c) = refined.start;     e_c(c) = refined.end;   s50_c(c) = refined.start50;     e50_c(c) = refined.end50;
     if c == best
         event = refined;                                                    % peak of the event: its best candidate
