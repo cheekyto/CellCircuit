@@ -19,7 +19,8 @@ function cluster_neuronal_events = cluster_neuronal_events(NetworkBurstPlayer, N
 %   5. Families (rule 3): average-linkage tree of the composite distance, cut where the events of a family are, on average, at least
 %      MIN_SIMILARITY similar (composite distance <= 1 - MIN_SIMILARITY). Before, Ward linkage on a classical MDS projection, with 2 to
 %      MAX_K families chosen with the silhouette score, a bootstrap of the events and a permutation test ("bootstrap_optimal_k",
-%      "permutation_test_clustering"): it always looked for 2 or more families and created families of 1-2 events (overfitting)
+%      "permutation_test_clustering", now in the folder "legacy"): it always looked for 2 or more families and created families of 1-2
+%      events (overfitting)
 %   6. Minimum size (rule 4): a family needs at least MIN_FAMILY_EVENTS events; the events of smaller groups belong to no family
 %      (label 0). If no family is found, all the events have label 0 (in the per-family results, all the primary events are then a
 %      single group: see "primaryFamilies")

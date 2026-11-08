@@ -442,20 +442,9 @@ P.cluster_neuronal_events.RESAMPLE_SEED = 0;                    % (new, November
 % (revised November 2026) MIN_SIZE_CLUSTER, MAX_K, ALPHA, MIN_DIFF and SIL_THRESHOLD were removed: they chose the number of families (2 to MAX_K)
 % with the bootstrap and the permutation test, which are no longer used (the families come from the cut at MIN_SIMILARITY)
 
-% bootstrap_optimal_k, permutation_test_clustering and safe_linkage: not used since November 2026 (see "cluster_neuronal_events")
-% bootstrap_optimal_k
-P.bootstrap_optimal_k.RNG_SEED = 0;                             % seed for the random number generator (change it to get a different, but still reproducible, result)
-P.bootstrap_optimal_k.N_BOOT = 1000;                            % number of bootstrap resamples (>= 1000 recommended)
-P.bootstrap_optimal_k.VOTE_THRESHOLD = 0.60;                    % candidate K must win in >= 60% of bootstraps (the higher the value, the more conservative)
-P.bootstrap_optimal_k.SIL_THRESHOLD = 0.30;                     % AND have a mean silhouette >= 0.25 (0.25 is a modest but non-trivial structure threshold) (the higher the value, the more conservative)
-
-% permutation_test_clustering
-P.permutation_test_clustering.RNG_SEED = 0;                     % seed for the random number generator (change it to get a different, but still reproducible, result)
-P.permutation_test_clustering.N_PERM = 1000;                    % number of permutations (>= 1000 recommended)
-P.permutation_test_clustering.ALPHA = 0.05;                     % significance threshold
-
-% safe_linkage
-P.safe_linkage.FALLBACK = 'average';
+% (revised November 2026) bootstrap_optimal_k, permutation_test_clustering and safe_linkage (with build_mds and build_mds_v2) are not used since
+% November 2026 (see "cluster_neuronal_events"): they were moved to the folder "legacy", and their parameters were removed from this file (run by
+% hand, they use the values written in their code, the same as those that were here)
 
 
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
