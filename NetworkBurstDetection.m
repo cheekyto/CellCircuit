@@ -59,6 +59,7 @@ FACTOR_FIRST_ROUND = 0.80;                       % (default: 0.8)
 MIN_CHAN_SECONDARY = 0.25;                      % minimum number of participating channels/units to accept the secondary events, in terms of the number of participating units in the primary events (default: 0.25)
 MIN_PEAK2_GAP = 1;                              % minimum number of secondary events per gap/window, after a level-1 primary event (default: 1)
 GAP_WITH_PEAK = 0.40;                           % minimum proportion of gaps/windows (level-1 primary events) followed by MIN_PEAK2_GAP secondary events, to accept
+                                                % (revised November 2026, user's choice: this proportion is enough; before, more than it was needed)
                                                 % the secondary events (default: 0.40; 0.75 until November 2026, then 0.50) (revised October 2026: from "NetworkBurstPlayers", where it never ran)
                                                 % (revised November 2026: 0.75 -> 0.60 -> 0.50, user's choices; with 0.75, a recording with secondary events
                                                 %  after 12 of its 16 level-1 events, exactly 75%, lost all of them)
@@ -77,6 +78,9 @@ RECRUIT_REL_MIN = 0.20;                         % (new, November 2026) small eve
 RECRUIT_LOCAL_BINS = 20;                        % (new, November 2026) small events: the baseline b is the recruitment just before and after the event, in this
                                                 % number of detection bins on each side (outside the large events and their tails; the quieter side); 0 = the
                                                 % global chance level f0, as before (default: 20; user's choice)
+RECRUIT_SECONDARY_CORE = 1;                     % (new, November 2026; user's choice) secondary events: 1 = the recruitment is measured on the core of the event,
+                                                % between its 50% edges (start50 to last50); 0 = from its start to its last time (before: on wide or merged events
+                                                % the window was long, and on the elevated firing of the decay the chance level rose with it) (default: 1)
 ADD_MATCH_TOL = 0.5;                            % (new, November 2026) option 5: a large event of option 4 is the same event as an event of option 3 when
                                                 % their peaks are within this time, in sec, or when the peak of one is inside the other (default: 0.5; user's choice)
 apply_parameters('NetworkBurstDetection');                                  % (revised October 2026) values of the parameter set of "run_pipeline", if any (see "pipeline_parameters")
@@ -308,11 +312,11 @@ switch option_method
         %     the edges of the small events are far from their peak, and over long windows most units fire by chance, so real events failed.
         %     The baseline is local (RECRUIT_LOCAL_BINS bins before and after the event): on the slow decay after a large event the units still
         %     fire above their average, so with the global chance level the bumps of the decay passed the test
-        %   - secondary events, within the event (start to last): above the RECRUIT_PERCENTILE percentile of the surrogates built on the decay
-        %     of the large events (local null)
+        %   - secondary events, within the event (its core, start50 to last50, with RECRUIT_SECONDARY_CORE; before November 2026, start to
+        %     last): above the RECRUIT_PERCENTILE percentile of the surrogates built on the decay of the large events (local null)
         % The large (level-1) events are not tested
         if signal == 1 && NetworkBurstPlayer.nBurst > 0 && isfield(NetworkBurstPlayer, 'Channels') && ~isempty(NetworkBurstPlayer.Channels)
-            [NetworkBurstPlayer, n_removed] = recruitment_check(NetworkBurstPlayer, spikeTrain, range, RECRUIT_PERCENTILE, RECRUIT_N_SURROGATE, RECRUIT_SEED, RECRUIT_EXCLUDE_TAIL, RECRUIT_PEAK_BINS, RECRUIT_REL_MIN, RECRUIT_LOCAL_BINS);
+            [NetworkBurstPlayer, n_removed] = recruitment_check(NetworkBurstPlayer, spikeTrain, range, RECRUIT_PERCENTILE, RECRUIT_N_SURROGATE, RECRUIT_SEED, RECRUIT_EXCLUDE_TAIL, RECRUIT_PEAK_BINS, RECRUIT_REL_MIN, RECRUIT_LOCAL_BINS, RECRUIT_SECONDARY_CORE);
             fprintf("\n Recruitment check: %d small primary events and %d secondary events removed (they do not recruit more units than chance, or than the time around them) \n", n_removed(1), n_removed(2));
         end
 
@@ -367,12 +371,14 @@ switch option_method
             fprintf("\n Started with %g secondary peaks, and it kept %g of them \n", cant_event0, cant_event);
 
             % (revised October 2026) the secondary events are accepted only if enough level-1 primary events are followed by them: at least
-            % MIN_PEAK2_GAP secondary events in more than GAP_WITH_PEAK of the gaps/windows. The rule was in "NetworkBurstPlayers" (option 1), where
-            % it never ran (FAST_MODE). It is checked after the quality control of each secondary event and BEFORE the level-0 primary events that
-            % coincide with a secondary event are removed: if the secondary events are rejected, those primary events are kept as primary events
+            % MIN_PEAK2_GAP secondary events in at least GAP_WITH_PEAK of the gaps/windows (revised November 2026, user's choice: before, in more
+            % than GAP_WITH_PEAK, so a recording with secondary events after exactly 40% of its level-1 events lost all of them). The rule was in
+            % "NetworkBurstPlayers" (option 1), where it never ran (FAST_MODE). It is checked after the quality control of each secondary event and
+            % BEFORE the level-0 primary events that coincide with a secondary event are removed: if the secondary events are rejected, those
+            % primary events are kept as primary events
             n_gap = numel(NetworkBurstPlayer.Secondary.nBurst_per_gap);     % number of gaps/windows (one per level-1 primary event)
             gap_with_peak = sum(NetworkBurstPlayer.Secondary.nBurst_per_gap >= MIN_PEAK2_GAP)/max(n_gap, 1);   % proportion of gaps with secondary events
-            if cant_event > 0 && gap_with_peak <= GAP_WITH_PEAK               % not enough gaps with secondary events: they are not secondary events
+            if cant_event > 0 && gap_with_peak < GAP_WITH_PEAK                % not enough gaps with secondary events: they are not secondary events
                 fprintf("\n Only %.0f%% of the level-1 primary events are followed by secondary events (minimum: %.0f%%): the %g secondary events are rejected \n", ...
                     100*gap_with_peak, 100*GAP_WITH_PEAK, cant_event);
                 cant_event = 0;
@@ -412,7 +418,7 @@ switch option_method
         info5 = [];
         if add_option4
             [NetworkBurstPlayer, info5] = add_large_option4(NetworkBurstPlayer, large4, spikeTrain, BurstDetected, range, ADD_MATCH_TOL, ...
-                {RECRUIT_PERCENTILE, RECRUIT_N_SURROGATE, RECRUIT_SEED, RECRUIT_EXCLUDE_TAIL, RECRUIT_PEAK_BINS, RECRUIT_REL_MIN, RECRUIT_LOCAL_BINS});
+                {RECRUIT_PERCENTILE, RECRUIT_N_SURROGATE, RECRUIT_SEED, RECRUIT_EXCLUDE_TAIL, RECRUIT_PEAK_BINS, RECRUIT_REL_MIN, RECRUIT_LOCAL_BINS, RECRUIT_SECONDARY_CORE});
         end
 
         if isnan(NetworkBurstPlayer.nBurst) || NetworkBurstPlayer.nBurst==0
@@ -575,7 +581,7 @@ fprintf("\n Option 5: %d large events of option 4: %d match an event of option 3
 end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-function [NBP, n_removed] = recruitment_check(NBP, spikeTrain, range, pct, n_sur, seed, excl_tail, peak_bins, rel_min, local_bins)
+function [NBP, n_removed] = recruitment_check(NBP, spikeTrain, range, pct, n_sur, seed, excl_tail, peak_bins, rel_min, local_bins, sec_core)
 
 % (new, November 2026) recruitment check of the small (level-0) primary events and of the secondary events (methods 1-3). The recruitment of
 % an event is the fraction of the participating units (NBP.Channels) with at least one spike in a window; chance is given by the same fraction
@@ -589,9 +595,10 @@ function [NBP, n_removed] = recruitment_check(NBP, spikeTrain, range, pct, n_sur
 %     "local_bins" = 0), the chance level f0 (median of the surrogates). Surrogates built on the time where the small events were searched,
 %     i.e. outside the closed zones of the large events (from their start to the end of their tail, "closedZones" of the detection), joined
 %     into one continuous time (the spikes of the large events would raise the chance level)
-%   - secondary events: window from their start to their last time (already short, at the fine bin). Kept if (1). Surrogates built on the
-%     decay of the large events (from their end to the end of their tail), joined into one continuous time (local null: the firing is still
-%     elevated after the large events)
+%   - secondary events: window on their core, from their 50% edges (start50 to last50), with "sec_core" = 1 (revised November 2026, user's
+%     choice); with "sec_core" = 0, from their start to their last time (before). Kept if (1). Surrogates built on the decay of the large
+%     events (from their end to the end of their tail), joined into one continuous time (local null: the firing is still elevated after the
+%     large events)
 % The large events are not tested
 
 K_MSEC_SEC = 1/1000;
@@ -680,6 +687,16 @@ if isfield(NBP, 'Secondary') && isfield(NBP.Secondary, 'nBurst') && ~isempty(NBP
     end
     null_sec = make_null(local);
     s = [NBP.Secondary.IndivBurst.start]';  l = [NBP.Secondary.IndivBurst.last]';
+    % (revised November 2026; user's choice) the core of each event, between its 50% edges: from start to last, the window was long on wide or
+    % merged events, and on the elevated firing of the decay the chance level rose with it (clear reverberations failed by 0.01)
+    B2 = NBP.Secondary.IndivBurst;
+    if nargin > 10 && sec_core && isfield(B2, 'start50') && isfield(B2, 'last50')
+        for i_core = 1:numel(B2)                                            % (a name of its own: the nested functions share the variables)
+            if isscalar(B2(i_core).start50) && isscalar(B2(i_core).last50) && B2(i_core).last50 > B2(i_core).start50
+                s(i_core) = B2(i_core).start50;   l(i_core) = B2(i_core).last50;
+            end
+        end
+    end
     keep = above_chance(window_frac(s, l), l - s, null_sec);
     remove = find(~keep);
     if ~isempty(remove)
