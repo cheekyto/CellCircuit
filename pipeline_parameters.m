@@ -184,6 +184,8 @@ P.Analyze_spikeTrain.NETWORK_BURST_ANALYSIS_METHOD = 2;         % algorithm to b
                                                                 %  =2       cluster analysis to identify different families of network bursts
 P.Analyze_spikeTrain.opt_checking = 0;
 P.Analyze_spikeTrain.print_Plots = 1;                           % option to save the rater plot of all neurons
+P.Analyze_spikeTrain.HIDE_PLOTS_MIN_RECORDINGS = 5;             % (new, November 2026) with this number of recordings or more in the run, the plots of print_Plots
+                                                                %  are saved without being displayed (default: 5)
 P.Analyze_spikeTrain.plot_option = 0;
 P.Analyze_spikeTrain.plot_network_burst = 0;
 

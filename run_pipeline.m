@@ -159,6 +159,8 @@ if any(stages == "ShapeSpikeTrainData") && any([recs.source] ~= "3Brain") && exi
 end
 code_ver = code_version(code_dir);
 cleanup = onCleanup(@() parameter_set('clear'));                            % the set is deactivated at the end (also after an error)
+setappdata(groot, 'run_pipeline_n_recordings', n_rec);                     % (new, November 2026) number of recordings of the run, read by
+cleanup_n = onCleanup(@() setappdata(groot, 'run_pipeline_n_recordings', 0));   % "Analyze_spikeTrain" (HIDE_PLOTS_MIN_RECORDINGS: plots saved, not displayed)
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Run the stages, recording by recording
