@@ -48,6 +48,8 @@ NETWORK_BURST_ANALYSIS_METHOD = 2;                  % algorithm to be used for n
                                                     %  =2       cluster analysis to identify different families of network bursts
 opt_checking = 0;                             
 print_Plots = 1;                                    % option to save the rater plot of all neurons
+HIDE_PLOTS_MIN_RECORDINGS = 5;                      % (new, November 2026; user's choice) with this number of recordings or more to analyze (in this call,
+                                                    % or in the run of "run_pipeline"), the plots of print_Plots are saved without being displayed
 plot_option = 0;
 plot_network_burst = 1;  
 
@@ -87,6 +89,19 @@ for k=1:n_recordings                                                            
     if ~isfile(fullfile(folders(k), sprintf('%s_QCmanual.mat', files_data(k)))) % check the exitence of the file
         error("The file %s (index: %g) can not be found!! ", files_data(k), k)
     end
+end
+
+% (new, November 2026; user's choice) with HIDE_PLOTS_MIN_RECORDINGS or more recordings to analyze (in this call, or in the run of "run_pipeline",
+% which calls this function once per recording), the plots of print_Plots are saved without being displayed (in long batches they kept taking
+% over the screen): they are created invisible, saved so that their .fig files open visible, and closed (see "save_plot")
+n_batch = n_recordings;
+if isappdata(groot, 'run_pipeline_n_recordings')
+    n_batch = max(n_batch, getappdata(groot, 'run_pipeline_n_recordings'));
+end
+hide_plots = n_batch >= HIDE_PLOTS_MIN_RECORDINGS;
+plot_visible = 'on';
+if hide_plots
+    plot_visible = 'off';
 end
 
 for k=1:n_recordings                                                        % across all recording files
@@ -418,7 +433,7 @@ PerCondition(cond).file = rec_conditions{cond,1};
 
 if print_Plots 
         
-    figure('Name','Raster Plot and Population Firing','Color','w');
+    figure('Name','Raster Plot and Population Firing','Color','w','Visible',plot_visible);
     colors_event = {'r', 'b', 'c', 'g', 'm'};
 
     if ~isnan(nNetBurst1) && nNetBurst1>0 && numel(NetworkBurstDetected.Channels(:,1))>0
@@ -469,7 +484,7 @@ if print_Plots
     end  
 
     file_output = fullfile(folder, sprintf('%s_NetBurst_%s%s.fig', file_data, string(condition(cond)),dose(cond)));
-    saveas(gcf, file_output)
+    save_plot(gcf, file_output, hide_plots)
 
 end
 
@@ -519,7 +534,7 @@ LABEL_POS = -5;
 if print_Plots && ~opt_rerun
 
     % ----- Raster plot of all active neurons -----------------
-    figure;
+    figure('Visible',plot_visible);
     all_rows = repelem((1:n_clusters)', cellfun(@numel, {spikeTimestamp.timeStamp})');     % row of each spike (same as "ones(data.nUnits,1)+k-1"), single plot call (revised October 2026)
     plot(vertcat(spikeTimestamp.timeStamp)*K_MSEC_SEC, all_rows,'|',"MarkerEdgeColor",[0 0 0]);     hold on;
     k = n_clusters;
@@ -535,10 +550,25 @@ if print_Plots && ~opt_rerun
     plot([t_fin t_fin], [0 n_clusters], '--r');
 
     file_output = fullfile(folder, sprintf('%s_RasterPlot.fig', file_data));
-    saveas(gcf, file_output)
+    save_plot(gcf, file_output, hide_plots)
 
 end
 clear('condition_analysis0', 'spikeTimestamp','PerCondition','n_clusterOriginal','n_cluster_Kilosort','n_cluster_3Brain','rec_conditions');
 end
 
+end
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+function save_plot(fig, file_output, hide)
+
+% (new, November 2026) saves a plot as a .fig file. A hidden plot (HIDE_PLOTS_MIN_RECORDINGS) is saved so that the file opens visible (a figure
+% saved invisible would open invisible), and it is closed
+
+if hide
+    set(fig, 'CreateFcn', 'set(gcbo, ''Visible'', ''on'')');
+end
+saveas(fig, file_output)
+if hide
+    close(fig)
+end
 end

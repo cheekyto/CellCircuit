@@ -29,6 +29,7 @@ end
 nSpikes = cellfun(@numel, trains);
 time = vertcat(trains{:}, zeros(0,1));
 unit = repelem((1:n_clusters)', nSpikes);
+unit = unit(:);                                                             % (fix, November 2026) a column also with a single cluster ("repelem" of a scalar gives a row)
 [time, order] = sort(time);                                                 % (the order of the spikes with the same time does not matter: only counts)
 
 mergeSpikeTrains.time = time;

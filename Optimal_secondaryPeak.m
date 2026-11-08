@@ -43,7 +43,7 @@ K_MSEC_SEC = 1/1000;                            % factor to rescale from msec to
 %BIN_SECONDARY = 0.50;                           % reduction factor for the bin size (default: 0.30)
 %FACTOR_BIN_SECONDARY = 2.5;                     % (default: 3)
 SMOOTH_ADD = 0;                                 % increament of the standard smoothing window length, to look for secondary peaks, in number of bins (default: 1; even for symmetric smoothing)
-BIN_MIN = 0.010;                                % minimum size of the bin (default: 0.008 sec)                                           
+BIN_MIN = 0.015;                                % minimum size of the bin (default: 0.015 sec; revised November 2026, user's choice: 0.010 -> 0.015)
 
 WINDOW_FRACTION = 1/4;                          % to partition the gap between peaks and assess the general level of activity  right after primary peaks (default: 1/4)
 THRESHOLD_BROAD = 1.80;                         % threshold to assess the activity right after primary peaks; ratio to the last partition (default: 1.80)
@@ -76,6 +76,14 @@ SEPARATION_LEVEL = 0.50;                        % a secondary event is separate 
 MIN_DROP_Z = 3;                                 % the drop must also be at least MIN_DROP_Z times its sampling noise, which is large with few units and fine
                                                 % bins: binomial noise of the participation (option 4), Poisson noise of the spike counts (options 1-3; revised
                                                 % November 2026, user's choice: before, option 4 only) (default: 3)
+MERGE_SECONDARY = 1;                            % (new, November 2026; user's choice) 1 = consecutive secondary events of a gap that are not separate by the
+                                                % rule above (between the two peaks the signal falls below SEPARATION_LEVEL of the height of the lower peak,
+                                                % by at least MIN_DROP_Z times its noise) are one event, with the higher peak and edges spanning both; 0 = no
+                                                % merge (before: one reverberation split into several events at the fine bins) (default: 1)
+MIN_RISE_Z = 3;                                 % (new, November 2026; user's choice) options 1-3: a secondary event must rise above the activity around it
+                                                % (median of the signal 0.5-2 s before and after its peak, outside the large event) by at least this number of
+                                                % times the Poisson noise of the two; on a long elevated tail, the fluctuations recruit more units than chance
+                                                % but are not distinct events; 0 = no check (default: 3)
 apply_parameters('Optimal_secondaryPeak');                                  % (revised October 2026) values of the parameter set of "run_pipeline", if any (see "pipeline_parameters")
 
 switch opt_binopti
@@ -122,6 +130,7 @@ if use_fine
     n_spk = cellfun(@numel, spk_t);
     all_t = vertcat(spk_t{:});
     all_u = repelem((1:n_clusters)', n_spk);
+    all_u = all_u(:);                                                       % (fix, November 2026) a column also with a single cluster ("repelem" of a scalar gives a row)
     [all_t, order] = sort(all_t);   all_u = all_u(order);
     impulse = zeros(4*(SMOOTH_FINE + SMOOTH_ADD) + 1, 1);   impulse(2*(SMOOTH_FINE + SMOOTH_ADD) + 1) = 1;
     noise_factor = sqrt(sum(smoothdata(impulse, 'gaussian', SMOOTH_FINE + SMOOTH_ADD).^2));   % reduction of the noise by the smoothing
@@ -273,6 +282,20 @@ if n_window > 0
                     secondary_peaks(k,1).IndivBurst = secondary_peaks(k,1).IndivBurst(separate);
                     secondary_peaks(k,1).nBurst = sum(separate);
                     drop_own = drop_own(separate);   drop_z = drop_z(separate);
+                end
+                % (new, November 2026; user's choice) consecutive secondary events of the gap that are not separate by the same rule are one event
+                if MERGE_SECONDARY && ~isempty(fine) && secondary_peaks(k,1).nBurst > 1
+                    [secondary_peaks(k,1), keep] = merge_secondary(secondary_peaks(k,1), fine, SEPARATION_LEVEL, MIN_DROP_Z, n_clusters, opt_norm, noise_factor);
+                    drop_own = drop_own(keep);   drop_z = drop_z(keep);
+                end
+                % (new, November 2026; user's choice) options 1-3: each secondary event must rise above the activity around it by MIN_RISE_Z times
+                % its Poisson noise
+                if MIN_RISE_Z > 0 && opt_norm ~= 2 && ~isempty(fine) && secondary_peaks(k,1).nBurst > 0
+                    rise_z = arrayfun(@(e) local_rise(fine, e.peak, peak_large(k)), secondary_peaks(k,1).IndivBurst);
+                    keep = isnan(rise_z(:)) | rise_z(:) >= MIN_RISE_Z;              % (NaN: not enough signal around the peak to tell; kept)
+                    secondary_peaks(k,1).IndivBurst = secondary_peaks(k,1).IndivBurst(keep);
+                    secondary_peaks(k,1).nBurst = sum(keep);
+                    drop_own = drop_own(keep);   drop_z = drop_z(keep);
                 end
                 nbursts = nbursts + secondary_peaks(k,1).nBurst;
               
@@ -443,4 +466,96 @@ else                                                                        % (r
     drop_z = (h2 - valley)/max(sqrt(fine.v(ip) + fine.v(iv)), eps);
 end
 separate = separate && drop_z >= min_z;
+end
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+function [S, keep] = merge_secondary(S, fine, level, min_z, n_units, opt_norm, noise_factor)
+
+% (new, November 2026; user's choice) consecutive secondary events of a gap are one event unless they are separate, by the rule of the separation
+% from the large event: between the two peaks the signal falls below "level" of the height of the lower peak above the median of the gap, by at
+% least min_z times its sampling noise. A merged event keeps its highest peak, and its edges span all its members
+%   keep:   index (in S.IndivBurst on input) of the event kept for each merged event, in time order
+
+B = S.IndivBurst;
+[~, o] = sort([B.peak]);
+grp = ones(1, numel(o));
+for i = 2:numel(o)
+    grp(i) = grp(i-1) + separate_pair(fine, B(o(i-1)).peak, B(o(i)).peak, level, min_z, n_units, opt_norm, noise_factor);
+end
+keep = zeros(1, max(grp));
+for g = 1:max(grp)
+    m = o(grp == g);
+    [~, b] = max([B(m).peakAmp]);
+    keep(g) = m(b);
+    if numel(m) > 1
+        for f = ["start" "start20" "start50"]
+            if isfield(B, f) && all(arrayfun(@(x) isscalar(x.(f)), B(m)))
+                B(keep(g)).(f) = min([B(m).(f)]);
+            end
+        end
+        for f = ["last" "last20" "last50" "tail"]
+            if isfield(B, f) && all(arrayfun(@(x) isscalar(x.(f)), B(m)))
+                B(keep(g)).(f) = max([B(m).(f)]);
+            end
+        end
+    end
+end
+S.IndivBurst = B(keep);
+S.nBurst = numel(keep);
+end
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+function sep = separate_pair(fine, t1, t2, level, min_z, n_units, opt_norm, noise_factor)
+
+% (new, November 2026) are the secondary peaks at t1 < t2 separate events? (see "merge_secondary")
+
+sep = true;
+i1 = find(fine.t <= t1, 1, 'last');   i2 = find(fine.t <= t2, 1, 'last');
+if isempty(i1) || isempty(i2)
+    return
+end
+if i2 <= i1 + 1                                                             % no bin between the two peaks
+    sep = false;
+    return
+end
+n1 = max(i1 - 1, 1):min(i1 + 1, numel(fine.y));   [h1, p1] = max(fine.y(n1));   p1 = n1(p1);
+n2 = max(i2 - 1, 1):min(i2 + 1, numel(fine.y));   [h2, p2] = max(fine.y(n2));   p2 = n2(p2);
+[valley, iv] = min(fine.y(i1:i2));   iv = i1 + iv - 1;                     % lowest point between the two peaks
+[low, w] = min([h1 h2]);   ip = [p1 p2];   ip = ip(w);                      % the lower peak
+height = low - fine.base;
+if height <= 0
+    sep = false;
+    return
+end
+sep = valley < fine.base + level*height;
+if opt_norm == 2
+    se = @(p) noise_factor*sqrt(max(p*(1 - p), 0)/max(n_units, 1));
+    dz = (low - valley)/max(sqrt(se(min(low, 1))^2 + se(min(valley, 1))^2), eps);
+else
+    dz = (low - valley)/max(sqrt(fine.v(ip) + fine.v(iv)), eps);
+end
+sep = sep && dz >= min_z;
+end
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+function z = local_rise(fine, t_peak, t_large)
+
+% (new, November 2026; user's choice) rise of the secondary peak at t_peak above the activity around it: the median of the signal 0.5-2 s before
+% and after the peak, outside the large event (+-1 s around its peak t_large), in units of the Poisson noise of the peak and of that level
+% (fine.v; options 1-3). NaN when there is not enough signal around the peak
+
+z = NaN;
+dt = fine.t(2) - fine.t(1);
+ip = find(abs(fine.t - t_peak) <= 2*dt);
+if isempty(ip)
+    return
+end
+[hp, j] = max(fine.y(ip));   ip = ip(j);
+d = fine.t - t_peak;
+side = ((d >= -2 & d <= -0.5) | (d >= 0.5 & d <= 2)) & abs(fine.t - t_large) > 1;
+if sum(side) < 3
+    return
+end
+base = median(fine.y(side));   vb = median(fine.v(side));
+z = (hp - base)/sqrt(max(fine.v(ip) + vb, eps));
 end

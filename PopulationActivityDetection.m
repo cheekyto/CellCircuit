@@ -69,6 +69,10 @@ TAIL_FACTOR = 3;                                % (new, November 2026) the tail 
 NOISE_ROBUST = 1;                               % (new, November 2026) noise of the second round (small events): 1 = robust, 1.4826 x the median absolute
                                                 % deviation of the signal without the large events and their tails; 0 = standard deviation (before)
 NOISE_FLOOR_SD = 0.25;                          % (new, November 2026) floor of the robust noise, as a proportion of the standard deviation (default: 0.25)
+SECONDARY_NOISE_TAIL = 1;                       % (new, November 2026; user's choice) noise of the search of secondary events (opt_secondary = 1, threshold > 0):
+                                                % 1 = standard deviation of the search window without the decay of the large event at its start (until the
+                                                % signal first falls to the median of the window, as the tails of the large events); 0 = standard deviation of
+                                                % the whole window (before), which that decay inflated (default: 1)
 
 % (new, November 2026) option 4 of "NetworkBurstDetection" (opt_norm = 2): participation signal with a surrogate threshold
 N_SURROGATE = 1000;                             % number of surrogates; each unit is circularly shifted by an independent random offset (default: 1000)
@@ -178,7 +182,17 @@ smoothed_spikesBin{sm} = smoothedSpikes;
 %%%     Identify the supra-threshold time points
 
 threshold = max(threshold, MIN_THRESHOLD);
-threshold_peak = std(smoothedSpikes)*threshold;                                % threshold to identify the peak of potential network burst events
+% (revised November 2026; user's choice) search of secondary events (not the scan of "Optimal_secondaryPeak", with threshold 0): the window starts
+% on the decay of the large event, which raised the standard deviation of the window 1.4-4.4 times, so the minimum prominence was above the
+% reverberations that follow the large event. The decay (until the signal first falls to the median of the window) is left out of the noise
+noise_peak = std(smoothedSpikes);
+if opt_secondary && threshold0 ~= 0 && SECONDARY_NOISE_TAIL
+    i0 = find(smoothedSpikes <= median(smoothedSpikes), 1);
+    if ~isempty(i0) && numel(smoothedSpikes) - i0 + 1 >= MIN_POINTS
+        noise_peak = std(smoothedSpikes(i0:end));
+    end
+end
+threshold_peak = noise_peak*threshold;                                         % threshold to identify the peak of potential network burst events
 if numel(smoothedSpikes) >= MIN_POINTS
     [pks, locs, widths, proms] = findpeaks(smoothedSpikes, MinPeakProminence=threshold_peak);
 else

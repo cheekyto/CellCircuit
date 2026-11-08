@@ -184,6 +184,8 @@ P.Analyze_spikeTrain.NETWORK_BURST_ANALYSIS_METHOD = 2;         % algorithm to b
                                                                 %  =2       cluster analysis to identify different families of network bursts
 P.Analyze_spikeTrain.opt_checking = 0;
 P.Analyze_spikeTrain.print_Plots = 1;                           % option to save the rater plot of all neurons
+P.Analyze_spikeTrain.HIDE_PLOTS_MIN_RECORDINGS = 5;             % (new, November 2026) with this number of recordings or more in the run, the plots of print_Plots
+                                                                %  are saved without being displayed (default: 5)
 P.Analyze_spikeTrain.plot_option = 0;
 P.Analyze_spikeTrain.plot_network_burst = 0;
 
@@ -238,6 +240,7 @@ P.NetworkBurstDetection.RECRUIT_EXCLUDE_TAIL = 3;              % fallback when t
 P.NetworkBurstDetection.RECRUIT_PEAK_BINS = 2;                 % (new, November 2026) small events: window centred on their peak where the recruitment is measured, in detection bins (default: 2)
 P.NetworkBurstDetection.RECRUIT_REL_MIN = 0.20;                % (new, November 2026) small events: minimum relative recruitment, (f - baseline)/(large events - baseline) in that window; 0 = no minimum (default: 0.20; 0.15 with the global baseline)
 P.NetworkBurstDetection.RECRUIT_LOCAL_BINS = 20;               % (new, November 2026) small events: baseline = recruitment in this number of bins before and after the event (quieter side); 0 = global chance level (default: 20)
+P.NetworkBurstDetection.RECRUIT_SECONDARY_CORE = 1;            % (new, November 2026) secondary events: recruitment on their core (50% edges); 0 = from start to last, as before (default: 1)
 P.NetworkBurstDetection.ADD_MATCH_TOL = 0.5;                   % (new, November 2026) option 5: a large event of option 4 matches an event of option 3 when the peaks are within this time (sec) or one peak is inside the other event (default: 0.5)
 P.NetworkBurstDetection.MIN_PEAK2_GAP = 1;                      % minimum number of secondary events per gap/window, after a level-1 primary event (default: 1)
 P.NetworkBurstDetection.GAP_WITH_PEAK = 0.40;                   % minimum proportion of gaps/windows (level-1 primary events) followed by MIN_PEAK2_GAP secondary events, to accept
@@ -304,6 +307,7 @@ P.PopulationActivityDetection.TAIL_FACTOR = 3;                  % (new, November
                                                                 % TAIL_FACTOR times the duration of the event after its end (default: 3)
 P.PopulationActivityDetection.NOISE_ROBUST = 1;                 % (new, November 2026) noise of the second round (small events): 1 = 1.4826 x median absolute deviation; 0 = standard deviation (default: 1)
 P.PopulationActivityDetection.NOISE_FLOOR_SD = 0.25;            % (new, November 2026) floor of the robust noise, as a proportion of the standard deviation (default: 0.25)
+P.PopulationActivityDetection.SECONDARY_NOISE_TAIL = 1;         % (new, November 2026) search of secondary events: noise = SD of the window without the decay of the large event; 0 = SD of the whole window, as before (default: 1)
 % PopulationActivityDetection: option 4 of NetworkBurstDetection (new, November 2026; participation signal, thresholds from surrogates)
 P.PopulationActivityDetection.N_SURROGATE = 1000;               % number of surrogates; each unit is circularly shifted by an independent random offset (default: 1000)
 P.PopulationActivityDetection.SURROGATE_SEED = 0;               % seed of the random offsets (the same seed gives the same surrogates)
@@ -342,7 +346,7 @@ P.PopulationActivitySize.SAFE_K = 0.40;                         % when saving th
 
 % Optimal_secondaryPeak
 P.Optimal_secondaryPeak.SMOOTH_ADD = 0;                         % increament of the standard smoothing window length, to look for secondary peaks, in number of bins (default: 1; even for symmetric smoothing)
-P.Optimal_secondaryPeak.BIN_MIN = 0.010;                        % minimum size of the bin (default: 0.008 sec)
+P.Optimal_secondaryPeak.BIN_MIN = 0.015;                        % minimum size of the bin (default: 0.015 sec; 0.010 until November 2026)
 P.Optimal_secondaryPeak.WINDOW_FRACTION = 1/4;                  % to partition the gap between peaks and assess the general level of activity  right after primary peaks (default: 1/4)
 P.Optimal_secondaryPeak.THRESHOLD_BROAD = 1.80;                 % threshold to assess the activity right after primary peaks; ratio to the last partition (default: 1.80)
 P.Optimal_secondaryPeak.THRESHOLD_WINDOWS = 0.40;               % minimum number of primary peaks with a signifnicant tail activity (default: 0.50-0.40)
@@ -361,6 +365,8 @@ P.Optimal_secondaryPeak.SMOOTH_FINE = 3;                        % smoothing of t
 P.Optimal_secondaryPeak.START_LEVEL_FINE = 0.50;                % the search starts where the large event falls to this fraction of its height above the median of the gap (default: 0.50)
 P.Optimal_secondaryPeak.SEPARATION_LEVEL = 0.50;                % between the two peaks, the signal must fall below this fraction of the height of the secondary peak (default: 0.50)
 P.Optimal_secondaryPeak.MIN_DROP_Z = 3;                         % minimum drop, in units of its sampling noise: binomial (option 4) or Poisson (options 1-3) (default: 3)
+P.Optimal_secondaryPeak.MERGE_SECONDARY = 1;                    % (new, November 2026) consecutive secondary events of a gap that are not separate (same rule) are merged; 0 = no merge (default: 1)
+P.Optimal_secondaryPeak.MIN_RISE_Z = 3;                         % (new, November 2026) options 1-3: a secondary event must rise above the activity 0.5-2 s around it by this times its Poisson noise; 0 = no check (default: 3)
 
 
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
