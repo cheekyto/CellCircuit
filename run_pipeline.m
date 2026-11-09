@@ -16,6 +16,8 @@ function run_pipeline(recordings, varargin)
 %   run_pipeline("recordings.csv", 'from', "IntegrateDataSets")                         % from a stage to the end
 %   run_pipeline("recordings.csv", 'parameters', "parameters_threshold5.m")             % a different parameter set
 %   run_pipeline("recordings.csv", 'parameters', "saved")                               % the same set as the last run of each recording
+%   run_pipeline("recordings.csv", 'parameters', "saved", 'renew', "cluster_neuronal_events")   % the same, but with the parameters of a
+%                                                                                       % function revised since then taken from the file
 %   run_pipeline("recordings.csv", 'changes', {'NetworkBurstDetection.method3.THRESHOLD', 5.0})   % a few values changed
 %   run_pipeline("recordings.csv", 'rows', [2 3])                                       % only some recordings of the table
 
@@ -41,6 +43,11 @@ function run_pipeline(recordings, varargin)
 %   options (name-value pairs):
 %       'parameters'        parameter file (default: "pipeline_parameters.m" of this folder), or "saved" (the set saved for each
 %                           recording by its last run)
+%       'renew'             (new, November 2026) with 'parameters', "saved": parts of each saved set taken from "pipeline_parameters.m"
+%                           of this folder instead, e.g., the parameters of a function revised after the last run (a saved set may hold
+%                           parameters that the function no longer has, which stops the run): a whole function ("Function": the
+%                           parameters it no longer has are removed) or single values ("Function.PARAMETER"); the rest of each saved
+%                           set (e.g., the settings of a recording) is kept. They are renewed before the 'changes' (default: none)
 %       'changes'           values changed for this run, on top of the parameter set: {'Function.PARAMETER', value, ...}
 %       'stages'            stages to run (they always run in the order of the pipeline) (default: all, end to end)
 %       'from'              first stage to run; the following ones also run
@@ -77,7 +84,7 @@ END_TO_END = STAGES(STAGES ~= "ShapeSpikeTrainData_3Brain");                % en
 %% Options
 
 opts = struct('parameters', "", 'changes', {{}}, 'stages', [], 'from', "", 'rows', [], 'project', "", 'verbose', [], ...
-    'stop_on_error', 0, 'extra_path', {{}});
+    'stop_on_error', 0, 'extra_path', {{}}, 'renew', "");                  % (revised November 2026: 'renew')
 if mod(numel(varargin), 2) ~= 0
     error("The options must be name-value pairs (e.g., run_pipeline(""recordings.csv"", 'stages', ""Analyze_spikeTrain""))");
 end
@@ -153,6 +160,19 @@ else
     P_file = load_parameters(param_file, opts.changes);                     % (it also checks the changes)
     source_text = param_file;
 end
+% (new, November 2026) parts of the saved sets taken from the parameter file (checked here, before any recording runs)
+renew = string(opts.renew);
+renew = renew(strlength(renew) > 0);
+P_renew = [];
+if ~isempty(renew)
+    if ~use_saved
+        error("The option 'renew' is used with 'parameters', ""saved"" (with a parameter file, every value already comes from the file)");
+    end
+    renew_file = string(fullfile(code_dir, 'pipeline_parameters.m'));
+    P_renew = load_parameters(renew_file);
+    check_renew(P_renew, renew);                                            % local function
+    source_text = source_text + ", with " + strjoin(renew, ", ") + " from " + renew_file;
+end
 changes_text = changes_description(opts.changes);
 if any(stages == "ShapeSpikeTrainData") && any([recs.source] ~= "3Brain") && exist('readNPY', 'file') ~= 2
     error("The function readNPY (npy-matlab), needed by ShapeSpikeTrainData, is not on the MATLAB path: add it, or use the option 'extra_path'");
@@ -200,13 +220,13 @@ for r=1:n_rec
     try
         if use_saved
             S = load_saved(file_params);
-            P = load_parameters(S.parameters, opts.changes);
+            P = load_parameters(renew_set(S.parameters, P_renew, renew), opts.changes);   % (revised November 2026: renew_set)
         else
             P = P_file;
         end
     catch ME
         fprintf("      ERROR: %s\n", ME.message);
-        errors(end+1) = sprintf("[%d/%d] %s: %s", r, n_rec, rec.file_name, ME.message);  
+        errors(end+1) = sprintf("[%d/%d] %s: %s", r, n_rec, rec.file_name, ME.message);
         ok_rec(r) = false;
         continue
     end
@@ -265,7 +285,7 @@ if any(stages == "Compile_MEAproject")
             end
             if use_saved
                 S = load_saved(file_params);
-                P = load_parameters(S.parameters, opts.changes);
+                P = load_parameters(renew_set(S.parameters, P_renew, renew), opts.changes);   % (revised November 2026: renew_set)
             else
                 P = P_file;
             end
@@ -477,6 +497,51 @@ if ~isfile(file_params)
     error("There is no saved parameter set (%s): run it first with a parameter file", file_params);
 end
 S = load(file_params, 'parameters');
+
+end
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+function check_renew(P_renew, renew)
+
+% (new, November 2026) function to check the names of the option 'renew': a function of the parameter file ("Function") or one of
+% its parameters ("Function.PARAMETER", "Function.method3.PARAMETER"), not a linked parameter (it is copied from its source)
+
+links = cell(0,2);
+if isfield(P_renew, 'links')
+    links = P_renew.links;
+end
+for k=1:numel(renew)
+    parts = strsplit(renew(k), '.');
+    S = P_renew;
+    found = parts(1) ~= "links";
+    for j=1:numel(parts)
+        if ~found || ~isstruct(S) || ~isfield(S, char(parts(j)))
+            found = false;
+            break
+        end
+        S = S.(char(parts(j)));
+    end
+    if ~found
+        error("'%s' (option 'renew') is not in the parameter file (check the name: 'Function' or 'Function.PARAMETER')", renew(k));
+    end
+    if any(strcmp(links(:,1), renew(k)))
+        source_name = links{strcmp(links(:,1), renew(k)), 2};
+        error("The parameter '%s' (option 'renew') is linked to '%s' (the same value): renew '%s' instead", renew(k), source_name, source_name);
+    end
+end
+
+end
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+function P = renew_set(P, P_renew, renew)
+
+% (new, November 2026) function to replace parts of a saved set by those of the parameter file (option 'renew'): a whole function
+% (its parameters that are not in the file are removed) or single values; with no part to renew, the saved set is unchanged
+
+for k=1:numel(renew)
+    parts = cellstr(strsplit(renew(k), '.'));
+    P = setfield(P, parts{:}, getfield(P_renew, parts{:}));
+end
 
 end
 

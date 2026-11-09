@@ -124,6 +124,7 @@ Only the progress is printed; the messages of each stage go to a log file next t
 run_pipeline("recordings.csv", 'stages', "Analyze_spikeTrain")             % one stage, with its messages on screen
 run_pipeline("recordings.csv", 'from', "IntegrateDataSets")                % from a stage to the end
 run_pipeline("recordings.csv", 'parameters', "saved")                      % the same parameters as the last run
+run_pipeline("recordings.csv", 'parameters', "saved", 'renew', "cluster_neuronal_events")   % the same, but the parameters of a function revised since then come from pipeline_parameters.m
 run_pipeline("recordings.csv", 'parameters', "my_parameters.m")            % a different parameter file
 run_pipeline("recordings.csv", 'changes', {'NetworkBurstDetection.method3.THRESHOLD', 5.0})   % one value changed
 ```
