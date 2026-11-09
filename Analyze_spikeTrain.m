@@ -67,6 +67,9 @@ plot_network_burst = 1;
 K_MSEC_SEC = 1/1000;                        % factor to rescale from msec to sec
 K_SEC_MIN = 1/60;                           % factor to rescale from sec to min
 MIN_N_BURST = 5;                            % minimum number of burst events to be considered a bursting neuron (default: 5)
+MIN_UNITS = 5;                              % (new, November 2026; user's choice) minimum number of good units to analyze a recording (default: 5); with fewer
+                                            % (0 to MIN_UNITS-1), each condition is saved with its label and window only, without any analysis, and
+                                            % "Compile_MEAproject" reports it with 0 active neurons, 0 Hz and the other metrics blank
 
 MIN_WINDOW = 0.4;                           
 
@@ -214,6 +217,29 @@ for j=1:n_condition_analysis                                               % acr
     fprintf("\nAnalyzing the condition %s \n", string(condition_file(cond)))
     fprintf("It will be saved as the condition:  %s (%s) \n", string(condition(cond)), dose(cond))
     fprintf("(the temporal window for analysis is %g to %g sec) \n", t_window(1), t_window(2))
+
+    % (new, November 2026; user's choice) with fewer than MIN_UNITS good units (none passed the quality control, or only a few), the condition
+    % is not analyzed: it is saved with its label and window, the results stay empty, and "too_few_units" marks it for "Compile_MEAproject"
+    % (before, the analyses crashed without units, so the recording stopped the pipeline)
+    if n_clusters < MIN_UNITS
+        fprintf("\n Only %g good units (minimum: %g): the condition is not analyzed \n", n_clusters, MIN_UNITS)
+        PerCondition(cond).spikeTrain = spikeTrain;
+        PerCondition(cond).SpikeFeature = [];
+        PerCondition(cond).BurstFeature = [];
+        PerCondition(cond).BurstDetected = [];
+        PerCondition(cond).BurstFeature_Population = [];
+        PerCondition(cond).TonicFeature_Population = [];
+        PerCondition(cond).NetworkBurstFeature = [];
+        PerCondition(cond).NetworkBurstStructure = [];
+        PerCondition(cond).NetworkBurstFeature0 = [];
+        PerCondition(cond).NetworkBurstDetected = [];
+        PerCondition(cond).condition = condition(cond);
+        PerCondition(cond).dose = dose(cond);
+        PerCondition(cond).window = t_window;
+        PerCondition(cond).file = rec_conditions{cond,1};
+        PerCondition(cond).too_few_units = true;
+        continue
+    end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Analyze the spiking activity
@@ -435,6 +461,7 @@ PerCondition(cond).condition = condition(cond);
 PerCondition(cond).dose = dose(cond);
 PerCondition(cond).window = t_window;
 PerCondition(cond).file = rec_conditions{cond,1};
+PerCondition(cond).too_few_units = false;                                   % (new, November 2026) the condition was analyzed (see MIN_UNITS)
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Save the raster plot and population firing for all participating neurons
@@ -548,7 +575,7 @@ end
 %% Save the raster plot and population firing for all neurons
 
 LABEL_POS = -5;
-if print_Plots && ~opt_rerun
+if print_Plots && ~opt_rerun && n_clusters > 0                             % (revised November 2026: no raster plot without units; it crashed)
 
     % ----- Raster plot of all active neurons -----------------
     figure('Visible',plot_visible);

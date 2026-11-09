@@ -180,8 +180,15 @@ end
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Manual curation
 
-switch option_main
-    
+% (new, November 2026) when no cluster is left after the quality control, there is nothing to plot or classify: the plots are skipped
+% (they crashed on the empty raster plots) and the empty result is saved below, so that the recording goes through the rest of the pipeline
+curation_case = option_main;
+if n_clusters == 0
+    fprintf("\n No cluster is left after the quality control: the plots of the manual curation are skipped \n")
+    curation_case = -1;
+end
+switch curation_case
+
     %%%%%%%%%%%%%%%%
     case 0          % show the clusters that do not meet the threshold for activity level ("minimum_activity")
     
@@ -388,8 +395,11 @@ switch option_main
             data = spikeTimestamp(idx);
             plot(data.timeStamp*K_MSEC_SEC, ones(data.nUnits,1)+i*SHIFT,'|',"MarkerEdgeColor",[0 0 0]);
             text(data.timeStamp(end)*K_MSEC_SEC, 1+(i-0.5)*SHIFT,sprintf('# %g', idx));                hold on;                clear data;
-        end 
-        ylim([0.5 1.5+i*SHIFT]);            xlabel('Time (sec)');            ylabel('Cluster');            title(sprintf('Good Clusters'));
+        end
+        if ~isempty(idx_plot)                                               % (revised November 2026) no limits when there is no good cluster to plot (it crashed)
+            ylim([0.5 1.5+numel(idx_plot)*SHIFT]);
+        end
+        xlabel('Time (sec)');            ylabel('Cluster');            title(sprintf('Good Clusters'));
 
         figure(2)                                                           % firing rate, ISI CV and LVR for discarded clusters
         subplot(1,2,1)                                                      % firing rate vs CV
@@ -505,7 +515,8 @@ if option_saveComplete
         data = spikeTimestamp(i);
         plot(data.timeStamp*K_MSEC_SEC, ones(data.nUnits,1)+i,'|',"MarkerEdgeColor",[0 0 0]);        hold on;        clear data;
     end 
-    ylim([0 1+i]);    xlabel('Time (sec)');    ylabel('Cluster');    title(sprintf('ALL Good Clusters'));
+    ylim([0 1+max(size(spikeTimestamp,2), 1)]);    xlabel('Time (sec)');    ylabel('Cluster');    title(sprintf('ALL Good Clusters'));   % (revised November 2026: the number of
+                                                                            % good clusters instead of the loop index, which did not exist when there was none; same limits otherwise)
 
     for j=1:size(rec_conditions,1)
         rec_conditions{j,2} = Indiv_Cond{j}.window;                         % add the temporal window to the variable for recording condition
@@ -516,7 +527,7 @@ if option_saveComplete
     fprintf("The total number of remaining good clusters is %g \n \n", size(spikeTimestamp,2))
     fprintf("The result of the manual curation has been saved \n \n")
 
-    if option_main==4
+    if option_main==4 && exist('unitLabel', 'var')                         % (revised November 2026: no labels when no cluster was left, see above)
        save(file_output,'unitLabel',"-append");  
        fprintf("\n The result of thge waveform-based classification is: %g good, %g weak, %g noise and %g incomplete \n", ...
            numel(find(unitLabel==1)), numel(find(unitLabel==2)), numel(find(unitLabel==-1)), sum(isnan(unitLabel(:,2))));

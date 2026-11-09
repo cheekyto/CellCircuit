@@ -15,6 +15,7 @@ These scripts check that a revised version of the pipeline gives the **same resu
 | `test_spike_features.m` | Function-level test of `SpikeFeatures` (entropy, mutual information, STTC, LV) on the clusters of an analysis window, same procedure |
 | `test_hypersynch_functions.m` | Function-level test of `HyperSyncPair` (random pairs + edge cases) and `ShuffleSpikeTrain` (methods 1, 2 and 3), same procedure |
 | `test_family_clustering.m` | Self-check of the families of network burst events (`cluster_neuronal_events`, `primaryFamilies`, November 2026) on synthetic spike trains: participating units of each event (planted units found, none in a long event without ensemble), one family per repeated ensemble, no family for an ensemble seen twice, stability, reproducibility (no reference recording needed) |
+| `test_CellCircuit.m` | Self-check of the window `CellCircuit` (November 2026): every parameter of `common_parameters` exists in `pipeline_parameters.m`, the window opens with the common adjustments first, the values typed are checked, the equivalent `run_pipeline` command follows the settings, and missing settings are reported (no reference recording needed) |
 
 ## How to use
 

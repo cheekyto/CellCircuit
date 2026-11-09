@@ -9,6 +9,7 @@ function Compile_NetBurstResults = Compile_NetBurstResults(n_cluster, cond_idx, 
 %                   =2, all primary clusters, in individual rows
 %                   ** all the different option include the secondary events
 %   thresholds:     (optional, revised October 2026) structure with the fields MIN_NETBURST, MIN_SECONDARY_RATE and MIN_PARENT (set in "Compile_MEAproject");
+%                   (new, November 2026) with the fields too_few_units = true and MIN_UNITS, a row with every metric blank (recording with too few units);
 %                   without it, the values below are used
 
 MIN_NETBURST = 1/210;                      % minimum rate of network burst events, in # per sec (default: 1/150) (revised October 2026: 1/150 -> 1/200;
@@ -37,7 +38,15 @@ else                                                                        % (r
     PerCondition = file_input;                                              % (before, the file was loaded in every call: 3 times per condition)
 end
 
-NetworkBurstDetected = PerCondition(cond_idx).NetworkBurstDetected;
+% (new, November 2026; user's choice) recording with fewer good units than the minimum ("too_few_units" and MIN_UNITS in "thresholds", set by
+% "Compile_MEAproject"): one row per condition with every metric blank (NaN); the condition may not have been analyzed (see "Analyze_spikeTrain")
+too_few_units = nargin >= 7 && isstruct(thresholds) && isfield(thresholds, 'too_few_units') && thresholds.too_few_units;
+if too_few_units
+    n_cluster = 1;
+    NetworkBurstDetected = struct('nBurst', nan, 'nBurst_level1', nan, 'Secondary', struct('nBurst', nan));
+else
+    NetworkBurstDetected = PerCondition(cond_idx).NetworkBurstDetected;
+end
 nNetBurst1 = NetworkBurstDetected.nBurst;
 nNetBurst2 = NetworkBurstDetected.Secondary.nBurst;
 
@@ -118,7 +127,11 @@ for k=1:n_cluster                                                           % ac
     File{k,1} = PerCondition(cond_idx).file;                                % name of the file
     Condition{k,1} = PerCondition(cond_idx).condition;                      % label of the experimental condition
     dose{k,1} = PerCondition(cond_idx).dose;                                % dose/concentration of the treatment drug
-        
+    if too_few_units                                                        % (new, November 2026) every metric stays blank (see above)
+        Family_Type{k} = sprintf('fewer than %g units', thresholds.MIN_UNITS);
+        continue
+    end
+
     if NetworkBurstDetected.nBurst > 0 && isstruct(NetworkBurstDetected.clustering) && isfield(NetworkBurstDetected.clustering, 'clusteringQuality')
         Clustering_Quality(k) = NetworkBurstDetected.clustering.clusteringQuality;  % (revised October 2026) always reported, as the number of events (same for all the rows of the condition)
     end

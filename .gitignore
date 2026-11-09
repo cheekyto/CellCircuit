@@ -5,3 +5,7 @@
 # macOS
 .DS_Store
 __MACOSX/
+
+# install files of the toolbox (tools/package_CellCircuit.m) and the version file it writes while packaging
+*.mltbx
+CellCircuit_version.txt

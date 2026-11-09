@@ -57,6 +57,9 @@ function run_pipeline(recordings, varargin)
 %                           =1, the messages of the stages are also printed (default: 1 for a single stage, 0 otherwise)
 %       'stop_on_error'     =1, stop at the first error; =0, continue with the next recording (default: 0)
 %       'extra_path'        folders to add to the MATLAB path (e.g., npy-matlab, needed by "ShapeSpikeTrainData")
+%       'progress'          (new, November 2026) function called at each step of the run with one structure (field "type": "start",
+%                           "stage", "recording", "group" or "end"; see "report_progress"), e.g., by the window "CellCircuit"; when it
+%                           returns true, the run stops after the current stage (default: none)
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%   OUTPUT   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -84,7 +87,7 @@ END_TO_END = STAGES(STAGES ~= "ShapeSpikeTrainData_3Brain");                % en
 %% Options
 
 opts = struct('parameters', "", 'changes', {{}}, 'stages', [], 'from', "", 'rows', [], 'project', "", 'verbose', [], ...
-    'stop_on_error', 0, 'extra_path', {{}}, 'renew', "");                  % (revised November 2026: 'renew')
+    'stop_on_error', 0, 'extra_path', {{}}, 'renew', "", 'progress', []);  % (revised November 2026: 'renew', 'progress')
 if mod(numel(varargin), 2) ~= 0
     error("The options must be name-value pairs (e.g., run_pipeline(""recordings.csv"", 'stages', ""Analyze_spikeTrain""))");
 end
@@ -195,8 +198,11 @@ end
 rec_stages = stages(stages ~= "Compile_MEAproject");
 errors = strings(0,1);
 ok_rec = true(n_rec,1);
+% (new, November 2026) progress of the run, for the option 'progress' (e.g., the window "CellCircuit"); stopped: the user asked to stop
+stopped = report_progress(opts.progress, 'type', "start", 'recordings', [recs.file_name], 'groups', [recs.group], 'stages', stages, ...
+    'parameters', source_text + changes_text);
 for r=1:n_rec
-    if isempty(rec_stages)
+    if isempty(rec_stages) || stopped
         break
     end
     rec = recs(r);
@@ -204,6 +210,7 @@ for r=1:n_rec
     if end_to_end && rec.source == "3Brain"
         fprintf("      skipped: 3Brain recordings run step by step (option 'stages')\n");
         ok_rec(r) = false;
+        stopped = report_progress(opts.progress, 'type', "recording", 'index', r, 'state', "skipped", 'message', "3Brain recordings run step by step");
         continue
     end
     file_params = fullfile(rec.folder, rec.file_name + "_parameters.mat");
@@ -211,8 +218,9 @@ for r=1:n_rec
     if ~isfolder(rec.folder)
         msg = sprintf("the folder %s does not exist", rec.folder);
         fprintf("      ERROR: %s\n", msg);
-        errors(end+1) = sprintf("[%d/%d] %s: %s", r, n_rec, rec.file_name, msg);   
+        errors(end+1) = sprintf("[%d/%d] %s: %s", r, n_rec, rec.file_name, msg);
         ok_rec(r) = false;
+        stopped = report_progress(opts.progress, 'type', "recording", 'index', r, 'state', "error", 'message', string(msg));
         continue
     end
 
@@ -228,6 +236,7 @@ for r=1:n_rec
         fprintf("      ERROR: %s\n", ME.message);
         errors(end+1) = sprintf("[%d/%d] %s: %s", r, n_rec, rec.file_name, ME.message);
         ok_rec(r) = false;
+        stopped = report_progress(opts.progress, 'type', "recording", 'index', r, 'state', "error", 'message', string(ME.message));
         continue
     end
     parameter_set('set', P);
@@ -237,8 +246,10 @@ for r=1:n_rec
         [inputs, skip] = stage_inputs(st, rec, end_to_end, verbose);
         if strlength(skip) > 0
             fprintf("      %-28s skipped (%s)\n", st, skip);
-            continue
+            report_progress(opts.progress, 'type', "stage", 'index', r, 'stage', st, 'state', "skipped", 'message', skip);
+            continue                                                        % (a stop asked meanwhile is seen at the end of the next stage)
         end
+        report_progress(opts.progress, 'type', "stage", 'index', r, 'stage', st, 'state', "running", 'message', "");
         [ME, elapsed] = run_stage(st, inputs, verbose, file_log);
         if isempty(ME)
             fprintf("%s\n", done_text(elapsed, verbose, st));
@@ -247,11 +258,14 @@ for r=1:n_rec
             if st == "Analyze_spikeTrain"                                   % collect the analyzed file in the folder of its group
                 collect_analyzed(rec, project);
             end
+            stopped = report_progress(opts.progress, 'type', "stage", 'index', r, 'stage', st, 'state', "done", 'elapsed', elapsed, 'message', "");
         else
             fprintf("%s\n", error_text(ME, elapsed, verbose, st, file_log));
             record.history(end).status = "error in " + st + ": " + first_line(ME.message);
-            errors(end+1) = sprintf("[%d/%d] %s, %s: %s", r, n_rec, rec.file_name, st, first_line(ME.message));   
+            errors(end+1) = sprintf("[%d/%d] %s, %s: %s", r, n_rec, rec.file_name, st, first_line(ME.message));
             ok_rec(r) = false;
+            stopped = report_progress(opts.progress, 'type', "stage", 'index', r, 'stage', st, 'state', "error", 'elapsed', elapsed, ...
+                'message', first_line(ME.message), 'log', string(file_log));
         end
         save_record(file_params, record);
         if ~isempty(ME)
@@ -259,6 +273,13 @@ for r=1:n_rec
                 rethrow(ME);
             end
             break                                                           % the next stages depend on this one
+        end
+        if stopped && st ~= rec_stages(end)                                 % (new, November 2026) the user asked to stop: the next stages do not run
+            fprintf("      stopped by the user after %s\n", st);
+            record.history(end).status = "stopped by the user after " + st;
+            save_record(file_params, record);
+            ok_rec(r) = false;
+            break
         end
     end
     if ok_rec(r)
@@ -270,9 +291,12 @@ end
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Compile the results, group by group
 
-if any(stages == "Compile_MEAproject")
+if any(stages == "Compile_MEAproject") && ~stopped                         % (revised November 2026: not after a stop asked by the user)
     groups = unique([recs.group], 'stable');
     for g = groups
+        if stopped
+            break
+        end
         fprintf("\n[group %s] %d recording(s) in %s - %s\n", g, sum([recs.group] == g), fullfile(project, g), now_text('HH:mm'));
         if any(~ok_rec([recs.group] == g))
             fprintf("      WARNING: some recordings of this group failed; their previous results (if any) are still in the group folder\n");
@@ -292,21 +316,27 @@ if any(stages == "Compile_MEAproject")
         catch ME
             fprintf("      ERROR: %s\n", ME.message);
             errors(end+1) = sprintf("[group %s]: %s", g, ME.message);      %#ok<AGROW>
+            stopped = report_progress(opts.progress, 'type', "group", 'group', g, 'state', "error", 'message', string(ME.message));
             continue
         end
         parameter_set('set', P);
         record = start_record(file_params, P, "Compile_MEAproject", source_text, changes_text, opts.changes, code_ver);
         inputs = struct('folderPath', char(project), 'group', char(g), 'system', 0);
+        report_progress(opts.progress, 'type', "group", 'group', g, 'state', "running", 'message', "");
         [ME, elapsed] = run_stage("Compile_MEAproject", inputs, verbose, file_log);
         if isempty(ME)
             fprintf("%s\n", done_text(elapsed, verbose, "Compile_MEAproject"));
             record.parameters_stage.Compile_MEAproject = P;
             record.history(end).stages_done(end+1) = "Compile_MEAproject";
             record.history(end).status = "done";
+            stopped = report_progress(opts.progress, 'type', "group", 'group', g, 'state', "done", 'elapsed', elapsed, 'message', "", ...
+                'excel', string(fullfile(project, g + "_Compiled.xlsx")));
         else
             fprintf("%s\n", error_text(ME, elapsed, verbose, "Compile_MEAproject", file_log));
             record.history(end).status = "error in Compile_MEAproject: " + first_line(ME.message);
             errors(end+1) = sprintf("[group %s] Compile_MEAproject: %s", g, first_line(ME.message));   %#ok<AGROW>
+            stopped = report_progress(opts.progress, 'type', "group", 'group', g, 'state', "error", 'elapsed', elapsed, ...
+                'message', first_line(ME.message), 'log', string(file_log));
         end
         save_record(file_params, record);
         if ~isempty(ME) && opts.stop_on_error
@@ -319,6 +349,10 @@ fprintf("\n=== run_pipeline finished in %s: %d recording(s), %d error(s)\n", tim
 for k=1:numel(errors)
     fprintf("    %s\n", errors(k));
 end
+if stopped
+    fprintf("    (stopped by the user: the remaining stages, recordings and compilations did not run)\n");
+end
+report_progress(opts.progress, 'type', "end", 'errors', errors, 'stopped', stopped, 'elapsed', toc(t_start), 'project', project);
 
 end
 
@@ -326,6 +360,27 @@ end
 %%%%%%%%%%%%%%%%%%%%%%%%   LOCAL FUNCTIONS   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+function stop = report_progress(fn, varargin)
+
+% (new, November 2026) function to report a step of the run to the function given with the option 'progress' (e.g., the window "CellCircuit"),
+% as one structure: type "start" (recordings, groups, stages, parameters), "stage" (index of the recording, stage, state: running / done /
+% skipped / error, elapsed, message, log), "recording" (index, state: error / skipped, message: the recording could not start), "group"
+% (group, state: running / done / error, elapsed, message, excel, log) or "end" (errors, stopped, elapsed, project). It returns true when
+% that function returns true (the user asked to stop). An error of that function (e.g., the window was closed) does not stop the run
+
+stop = false;
+if isempty(fn)
+    return
+end
+try
+    out = fn(struct(varargin{:}));
+    stop = isequal(out, true);
+catch ME
+    fprintf("      (the progress display failed: %s)\n", ME.message);
+end
+end
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 function [inputs, skip] = stage_inputs(stage, rec, end_to_end, verbose)
 
 % function to define the inputs of a stage for one recording (folders, file names, and the options that must not stop the run)
@@ -738,6 +793,8 @@ if status == 0
     if status == 0 && ~isempty(strtrim(out))
         code_ver = code_ver + " (with uncommitted changes)";
     end
+elseif isfile(fullfile(code_dir, 'CellCircuit_version.txt'))               % (new, November 2026) installed toolbox (no git): the version written
+    code_ver = string(strtrim(fileread(fullfile(code_dir, 'CellCircuit_version.txt'))));   % by "tools/package_CellCircuit"
 end
 
 end
