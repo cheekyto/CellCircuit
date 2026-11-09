@@ -8,10 +8,13 @@ function file = package_CellCircuit(version, output_file)
 %   package_CellCircuit("2.1.0")                         writes CellCircuit_2.1.0.mltbx in the folder of the repository
 %   package_CellCircuit("2.1.0", "/path/CellCircuit.mltbx")
 %
-% Included: the functions of the main folder that are tracked by git (commit them first), the window (CellCircuit.m, common_parameters.m),
-% the recordings template, README, LICENSE and the documentation. Not included: tests, legacy functions, data, and npy-matlab (each user
-% sets its folder in the window, tab Settings). The version and the git commit are written in CellCircuit_version.txt, which "run_pipeline"
-% saves in the history of each recording when the code is not a git repository. Tested with MATLAB R2025b.
+% (revised, November 2026) Only the committed code is packaged: the files come from a clean copy of the last commit (git archive), so
+% uncommitted changes and files of the working folder never reach the package (before, the files were read from the working folder, so
+% uncommitted edits of committed files, e.g., of the documentation, were packaged too); the uncommitted changes are listed.
+% Included: the functions of the main folder (with the window, CellCircuit.m and common_parameters.m), the recordings template, README,
+% LICENSE and the documentation. Not included: tests, tools, legacy functions, data, and npy-matlab (each user sets its folder in the
+% window, tab Settings). The version and the commit are written in CellCircuit_version.txt, which "run_pipeline" saves in the history of
+% each recording when the code is not a git repository. Tested with MATLAB R2025b.
 
 if nargin < 1 || strlength(string(version)) == 0
     error("Give the version of the package, e.g., package_CellCircuit(""2.1.0"")");
@@ -22,34 +25,40 @@ if nargin < 2
     output_file = fullfile(root, "CellCircuit_" + version + ".mltbx");
 end
 
-% files: the .m files of the main folder tracked by git, plus the window
-[status, out] = system(sprintf('git -C "%s" ls-files', root));
+% clean copy of the last commit
+[status, commit] = system(sprintf('git -C "%s" rev-parse --short HEAD', root));
 if status ~= 0
-    error("git is needed to list the files of the package (only the committed files are packaged)");
+    error("git is needed: the package is built from the last commit of the repository");
 end
-tracked = splitlines(string(strtrim(out)));
-main_m = string({dir(fullfile(root, '*.m')).name})';
-included = main_m(ismember(main_m, tracked) | ismember(main_m, ["CellCircuit.m", "common_parameters.m"]));
-left_out = setdiff(main_m, included);
-if ~isempty(left_out)
-    fprintf("Not packaged (not committed): %s\n", strjoin(left_out, ", "));
+commit = strtrim(string(commit));
+copy = string(tempname);
+zip_file = copy + ".zip";
+cleanup = onCleanup(@() remove_copy(copy, zip_file));
+[status, out] = system(sprintf('git -C "%s" archive --format=zip -o "%s" HEAD', root, zip_file));
+if status ~= 0
+    error("The copy of the last commit could not be made: %s", out);
 end
-[~, commit] = system(sprintf('git -C "%s" rev-parse --short HEAD', root));
-[~, dirty] = system(sprintf('git -C "%s" status --porcelain --untracked-files=no', root));
-version_text = "CellCircuit " + version + " (commit " + strtrim(string(commit));
-if ~isempty(strtrim(dirty))
-    version_text = version_text + ", with uncommitted changes";
+unzip(zip_file, copy);
+
+% what is left out: the uncommitted changes of the working folder
+[~, dirty] = system(sprintf('git -C "%s" status --porcelain', root));
+if strlength(strtrim(string(dirty))) > 0
+    fprintf("Not packaged (uncommitted changes of the working folder; the package has the commit %s):\n%s", commit, dirty);
 end
-version_text = version_text + ")";
-version_file = fullfile(root, "CellCircuit_version.txt");
+
+version_text = "CellCircuit " + version + " (commit " + commit + ")";
+version_file = fullfile(copy, "CellCircuit_version.txt");
 fid = fopen(version_file, 'w');   fprintf(fid, '%s\n', version_text);   fclose(fid);
-cleanup = onCleanup(@() delete(version_file));
 
-files = [fullfile(root, included); version_file; fullfile(root, ["recordings_template.csv", "README.md", "LICENSE"])'; ...
-         fullfile(root, "docs", "FUNCTION_REFERENCE.md")];
+main_m = string({dir(fullfile(copy, '*.m')).name})';
+files = [fullfile(copy, main_m); version_file; fullfile(copy, ["recordings_template.csv", "README.md", "LICENSE"])'; ...
+         fullfile(copy, "docs", "FUNCTION_REFERENCE.md")];
 files = files(isfile(files));
+if ~any(main_m == "CellCircuit.m")
+    error("The last commit has no CellCircuit.m");
+end
 
-opts = matlab.addons.toolbox.ToolboxOptions(char(root), "CellCircuit-MEA-pipeline");
+opts = matlab.addons.toolbox.ToolboxOptions(char(copy), "CellCircuit-MEA-pipeline");
 opts.ToolboxName = "CellCircuit";
 opts.ToolboxVersion = version;
 opts.Summary = "Multielectrode-array (MEA) recordings of brain organoids: firing, bursting and network bursting, to Excel tables.";
@@ -58,11 +67,21 @@ opts.Description = "Run the whole pipeline from a window (Apps tab: CellCircuit,
     "and Machine Learning Toolbox, and npy-matlab (to read Kilosort data).";
 opts.AuthorName = "Sung Min Yang";
 opts.ToolboxFiles = cellstr(files);
-opts.ToolboxMatlabPath = {char(root)};
-opts.AppGalleryFiles = {char(fullfile(root, "CellCircuit.m"))};
+opts.ToolboxMatlabPath = {char(copy)};
+opts.AppGalleryFiles = {char(fullfile(copy, "CellCircuit.m"))};
 opts.OutputFile = char(output_file);
 matlab.addons.toolbox.packageToolbox(opts);
 file = string(output_file);
 fprintf("Package written: %s (%s, %d files)\n", file, version_text, numel(files));
 
+end
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+function remove_copy(copy, zip_file)
+if isfolder(copy)
+    rmdir(copy, 's');
+end
+if isfile(zip_file)
+    delete(zip_file);
+end
 end
