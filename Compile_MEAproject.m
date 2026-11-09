@@ -40,6 +40,9 @@ MIN_NETBURST = 1/210;                      % minimum rate of network burst event
                                            %  "Compile_NetBurstResults" used its own value, 1/150). Below it, the metrics stay NaN, but the number of events is reported
 MIN_SECONDARY_RATE = 0.5;                  % minimum average number of secondary peaks per primary event (default: 0.5)
 MIN_PARENT = 0.25;                         % minimum proportion of primary peaks with secondary peaks (default: 0.25)
+MIN_UNITS = 5;                             % (new, November 2026; user's choice) recordings with fewer good units (0 to MIN_UNITS-1) are reported with 0 active
+                                           % neurons (Number_Good_Clusters, Number_Kilosort, Number_3Brain) and 0 Hz (Firing_Rate); every other metric stays blank
+                                           % (NaN). The same value as "MIN_UNITS" of "Analyze_spikeTrain", which does not analyze them (default: 5)
 
 K_MSEC_SEC = 1/1000;                        % factor to rescale from msec to sec
 
@@ -132,9 +135,13 @@ for i=1:n_recordings                                                        % ac
     info = whos('-file', file_input, 'spikeTimestamp');                     % size of "spikeTimestamp", without loading all the spikes
     n_good_clusters = info.size(2);                                         % total number of good clusters (as "size(spikeTimestamp,2)")
 
+    too_few = n_good_clusters < MIN_UNITS;                                  % (new, November 2026) fewer good units than the minimum (see MIN_UNITS)
     analyzed = false(n_conditions,1);                                       % =true, if the condition k was analyzed
     for k=1:min(n_conditions, numel(PerCondition))
         analyzed(k) = ~isempty(PerCondition(k).SpikeFeature);
+        if isfield(PerCondition, 'too_few_units') && isequal(PerCondition(k).too_few_units, true)
+            analyzed(k) = true;                                             % (new, November 2026) not analyzed by "Analyze_spikeTrain" for its few units,
+        end                                                                 % but reported (see below)
     end
     if ~all(analyzed)
         fprintf("\n WARNING: %s has %g recording conditions, but only %g were analyzed (conditions skipped: %s) \n", Recording{i}, n_conditions, nnz(analyzed), mat2str(find(~analyzed)'));
@@ -158,6 +165,24 @@ for i=1:n_recordings                                                        % ac
         % spiking activity (general)
         T_start(idx) = PerCondition(k).window(1);                           % start of the analysis window, in sec
         T_end(idx) = PerCondition(k).window(2);                             % end of the analysis window, in sec
+
+        % (new, November 2026; user's choice) fewer than MIN_UNITS good units (0 to MIN_UNITS-1): 0 active neurons and 0 Hz; every other metric
+        % stays blank (NaN), in the network bursting tables too (one row per condition). Recordings analyzed before this rule with a few units
+        % are reported the same way
+        if too_few
+            Number_Good_Clusters(idx) = 0;
+            Number_Kilosort(idx) = 0;
+            Number_3Brain(idx) = 0;
+            Firing_Rate(idx) = 0;
+            blank = thresholds;
+            blank.too_few_units = true;
+            blank.MIN_UNITS = MIN_UNITS;
+            NETbursting0 = vertcat(NETbursting0, Compile_NetBurstResults(1, k, Recording{i}, PerCondition, ttx, 0, blank));
+            NETbursting1 = vertcat(NETbursting1, Compile_NetBurstResults(1, k, Recording{i}, PerCondition, ttx, 1, blank));
+            NETbursting2 = vertcat(NETbursting2, Compile_NetBurstResults(1, k, Recording{i}, PerCondition, ttx, 2, blank));
+            continue
+        end
+
         Number_Good_Clusters(idx) = n_good_clusters;                        % total number of good clusters
         Number_Kilosort(idx) = n_cluster_Kilosort;                          % total number of good clusters coming from Kilosort dataset
         Number_3Brain(idx) = n_cluster_3Brain;                              % total number of good clusters coming from 3Brain dataset

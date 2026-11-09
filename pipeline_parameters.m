@@ -191,6 +191,8 @@ P.Analyze_spikeTrain.plot_network_burst = 0;
 
 % Analyze_spikeTrain
 P.Analyze_spikeTrain.MIN_N_BURST = 5;                           % minimum number of burst events to be considered a bursting neuron (default: 5)
+P.Analyze_spikeTrain.MIN_UNITS = 5;                             % (new, November 2026) minimum number of good units to analyze a recording (default: 5); with fewer, the
+                                                                % conditions are saved without analysis, and compiled with 0 active neurons, 0 Hz and the other metrics blank
 P.Analyze_spikeTrain.MIN_WINDOW = 0.4;
 P.Analyze_spikeTrain.TREATMENT = {'CGP', 'Gabazine', 'DNQX', 'D-AP5', 'TTX'};          % labels of the treatments, matched to the filename of each condition
 P.Analyze_spikeTrain.RATIO_MATCH = 0.60;                        % minimum matching between the treatment labels and the filename
@@ -473,6 +475,7 @@ P.Compile_MEAproject.MIN_NETBURST = 1/210;                      % minimum rate o
                                                                 %  "Compile_NetBurstResults" used its own value, 1/150). Below it, the metrics stay NaN, but the number of events is reported
 P.Compile_MEAproject.MIN_SECONDARY_RATE = 0.5;                  % minimum average number of secondary peaks per primary event (default: 0.5)
 P.Compile_MEAproject.MIN_PARENT = 0.25;                         % minimum proportion of primary peaks with secondary peaks (default: 0.25)
+% MIN_UNITS: the same value as Analyze_spikeTrain.MIN_UNITS (see P.links at the end; new, November 2026)
 P.Compile_MEAproject.TREATMENT = {'BASELINE', 'Gabazine', 'CGP', 'DNQX', 'D-AP5', 'TTX', 'unknown'};    % labels of the treatments
 P.Compile_MEAproject.RATIO_MATCH = 0.70;                        % minimum matching between the treatment labels and the filename
 P.Compile_MEAproject.COL_COND = 4;
@@ -502,4 +505,5 @@ P.links = {
     'Optimal_secondaryPeak.MIN_CHAN',               'NetworkBurstDetection.MIN_CHAN';
     'Optimal_secondaryPeak.MIN_CHAN_SECONDARY',     'NetworkBurstDetection.MIN_CHAN_SECONDARY';
     'NetworkBurstPlayers.MIN_PEAK2_GAP',            'NetworkBurstDetection.MIN_PEAK2_GAP';
-    'NetworkBurstPlayers.GAP_WITH_PEAK',            'NetworkBurstDetection.GAP_WITH_PEAK'};
+    'NetworkBurstPlayers.GAP_WITH_PEAK',            'NetworkBurstDetection.GAP_WITH_PEAK';
+    'Compile_MEAproject.MIN_UNITS',                 'Analyze_spikeTrain.MIN_UNITS'};          % (new, November 2026)

@@ -181,8 +181,10 @@ end
 
 if include_Kilosort && include_3Brain
 
+if n_cluster_Kilosort > 0                                                   % (revised November 2026) without Kilosort clusters there is nothing to compare (it crashed here)
 t_step = spikeTimestamp_Kilosort(1).t_step;                                                        % temporal step, in msec
 range = [spikeTimestamp_Kilosort(1).window(1) spikeTimestamp_Kilosort(1).window(2)]./K_MSEC_SEC;  % temporal window for analysis, in msec (entire recording)
+end
 
 similarCluster = [];
 BurstDetected_Kilosort = cell(n_cluster_Kilosort,1); BurstFeature_Kilosort = cell(n_cluster_Kilosort,1);                                          % initialize the variables for burst structure (revised October 2026: n x 1, it was n x n)
@@ -282,7 +284,11 @@ end
 
 if include_3Brain
     spikeTimestamp_3Brain(discard_3Brain) = [];                             % eliminate the discarded 3Brain clusters (all at once)
-    if include_Kilosort                                                     % (revised October 2026) the Kilosort clusters were already discarded above; before, they were
+    if include_Kilosort && isempty(spikeTimestamp_3Brain)                   % (revised November 2026) when one of the datasets has no cluster left, only the other one is
+       spikeTimestamp = spikeTimestamp_Kilosort;                            % kept: the empty structure may not have the same fields, and the concatenation crashed
+    elseif include_Kilosort && isempty(spikeTimestamp_Kilosort)
+       spikeTimestamp = spikeTimestamp_3Brain;
+    elseif include_Kilosort                                                 % (revised October 2026) the Kilosort clusters were already discarded above; before, they were
        spikeTimestamp = cat(2,spikeTimestamp_Kilosort, spikeTimestamp_3Brain);  % deleted a second time here, with indexes that had already shifted (crash, or wrong clusters deleted)
     else
        spikeTimestamp = spikeTimestamp_3Brain;
