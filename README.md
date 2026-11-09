@@ -69,7 +69,7 @@ Every change that alters a result was reviewed on its own, with its measured eff
 
 **Reproducible.**
 - One command runs the whole pipeline for a list of recordings: `run_pipeline("recordings.csv")`.
-- All 265 parameters of the pipeline live in a single file, `pipeline_parameters.m`.
+- All 267 parameters of the pipeline live in a single file, `pipeline_parameters.m`.
 - The parameter set used for each recording is saved next to its data, with the history of its runs and the git version of the code.
 - A recording can be rerun with the same set, with a different set, or with a few values changed.
 
@@ -118,6 +118,13 @@ Only the progress is printed; the messages of each stage go to a log file next t
 === run_pipeline finished in 5.0 min: 1 recording(s), 0 error(s)
 ```
 
+**Without writing code: the CellCircuit window.** Type `CellCircuit` in MATLAB (or click CellCircuit in the Apps tab, once the install file is installed, see below). The window has three tabs:
+1. **Recordings:** open a recordings table, or add the recordings found in a folder, and fill in the group of each one; tick the recordings to run.
+2. **Settings:** what to run (the whole pipeline, from a stage to the end, or some stages), which parameters (the default values, the values saved for each recording by its last run, or another file), and single values to change for this run. The values that may need adjusting for a recording (about 15, e.g., the minimum number of units of a network burst, or the threshold of the large events) are listed first, with a plain description; every other parameter is under "All parameters (advanced)". Each user can move parameters between the two lists (at most 15 common adjustments); the window keeps each user's list, and the default one is in `common_parameters.m`.
+3. **Run:** the progress of each recording and stage, the messages of the run, and buttons to open the logs and the Excel results. Stop ends the run after the stage that is running. The equivalent `run_pipeline` command is shown, to repeat the run in a script.
+
+**Install file for users without coding experience:** `tools/package_CellCircuit("2.1.0")` writes `CellCircuit_2.1.0.mltbx` (only the committed functions). Double-clicking it in MATLAB installs the pipeline and adds CellCircuit to the Apps tab; installing a newer file replaces the older one. Use either the installed toolbox or this folder on the MATLAB path, not both.
+
 **3. Rerun or change things:**
 
 ```matlab
@@ -150,11 +157,13 @@ Each stage can also be run by hand, as before (open it, edit its INPUTS section,
 ```
 CellCircuit/
 ├── run_pipeline.m            master function (recordings table → group tables)
+├── CellCircuit.m             window to run the pipeline without code (common_parameters.m: the values shown first)
 ├── pipeline_parameters.m     every parameter of the pipeline, in one file
 ├── recordings_template.csv   example of a recordings table
 ├── <stage>.m                 the eight stages (ShapeSpikeTrainData ... Compile_MEAproject)
 ├── <helper>.m                detection, features, statistics and clustering functions
 ├── tests/                    regression harness and unit tests (see tests/README.md)
+├── tools/                    package_CellCircuit.m: builds the install file (.mltbx) of the toolbox and its app
 ├── docs/FUNCTION_REFERENCE.md   detailed documentation of every stage and function, and the list of changes
 └── legacy/                   functions that no stage uses any more
 ```
