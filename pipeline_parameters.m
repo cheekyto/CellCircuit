@@ -343,7 +343,8 @@ P.test_bimodality.THRESHOLD_BC = 0.555;                         % (default: 0.55
 
 % PopulationActivitySize
 P.PopulationActivitySize.MIN_CHAN = 6;                          % minimum number of channels involved in a single network burst (default: 6)
-P.PopulationActivitySize.MIN_MULTIPLE = 4;                      % minimum number of channels with multiple spikes involved in a single network burst (default: 4)
+P.PopulationActivitySize.MIN_MULTIPLE = 5;                      % minimum number of channels with multiple spikes involved in a single network burst (default: 5)
+                                                                % (revised November 2026: 4 -> 5; the 4 set on 5 November was an accident)
 P.PopulationActivitySize.MULTIPLE_SPIKE = 2;                    % minimum number of spikes to label as multiple (default: 2)
 P.PopulationActivitySize.SAFE_K = 0.40;                         % when saving the spikes for each network burst event, the extra time is added on each side (default: 0.4)
 
