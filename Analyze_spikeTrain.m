@@ -3,6 +3,8 @@ function Analyze_spikeTrain(inputs)
 % (optional) inputs:    structure to overwrite any variable of the sections INPUTS and PARAMETERS (e.g., inputs.folders, inputs.files_data); see "override_inputs"
 %                       when it is not provided, the values defined in the code are used
 % (revised October 2026: raster plots drawn with a single plot call; the dose loop no longer reuses "j"; see also "SpikeFeatures")
+% (revised November 2026; user's choice: the baseline is the condition identified by its file name, see "baselineCondition"; before, it was
+%  always the first condition, and a recording whose TTX file was listed first had its TTX condition saved as "Baseline")
 
 if ~parameter_set('active'), clc; end; close all;      % (revised October 2026) no "clc" while "run_pipeline" runs (it would erase its progress messages)
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -131,6 +133,18 @@ n_condition_analysis = numel(condition_analysis);
 
 fprintf("The total number of final good clusters in %s is %g \n", file_data, n_clusters)
 
+% (revised November 2026; user's choice) the baseline is the condition whose file name (without extension) is the start of the file name of
+% every other condition (e.g., "rec_D3.brw" for "rec_D3_ttx_00.brw"), wherever it is in the list; when no condition fits this rule (e.g., the
+% 3Brain names "<name>_Baseline", "<name>_TTX"), the first condition, as before. Before, it was always the first condition (the first row of
+% recording_data.csv): when the TTX file was listed first, the TTX condition was saved as "Baseline" and the baseline as "unknown"
+[base_cond, base_by_name] = baselineCondition(rec_conditions(:,1));
+if ~base_by_name && n_conditions > 1
+    fprintf("No file name is the start of all the others: the first condition (%s) is taken as the baseline \n", string(rec_conditions{1,1}))
+elseif base_cond ~= 1
+    fprintf("\n WARNING: the baseline (%s) is not the first condition (condition %g): check the order of the conditions (recording_data.csv) \n", ...
+        string(rec_conditions{base_cond,1}), base_cond)
+end
+
 condition_analysis0 = condition_analysis;
 if n_condition_analysis == 1 
     if condition_analysis == -1
@@ -179,10 +193,10 @@ for j=1:n_condition_analysis                                               % acr
     aux_cluster = split(rec_conditions{cond,1},".b");                               % assuming the raw data file was a .brw or .bxr file
     condition_file(cond) = aux_cluster(1);                                          % file name for the condition  
     pat = caseInsensitivePattern("_" + digitsPattern + ("u"|"m"|"n") + "M");
-    if cond==1                                                              % assuming that the first condition is the baseline
-        condition(cond) = 'Baseline';                                       % name of the condition    
+    if cond==base_cond                                                      % the baseline (revised November 2026: identified by its file name; before, the first condition)
+        condition(cond) = 'Baseline';                                       % name of the condition
     else
-        aux_condition0 = rec_conditions{1,1};                               % assuming that the first condition is the baseline
+        aux_condition0 = rec_conditions{base_cond,1};                       % file name of the baseline (revised November 2026: before, of the first condition)
         aux0 = split(aux_condition0,".b");
         condition0 = aux0(1);                                               % main name for the experiment
         aux_condition = extractAfter(rec_conditions{cond,1},condition0);
@@ -321,7 +335,7 @@ else
     BurstFeature_Population.burst.neurons = 0;                              % normalized number of clusters with phasic firing activity
 end
 
-if cond==1
+if cond==base_cond                                                          % (revised November 2026: the baseline; before, the first condition)
     nBurst0 = nBurst;
     nBurst_threshold0 = nBurst_threshold;
     n_bursting0 = n_bursting;
@@ -562,7 +576,7 @@ if plot_option
     plot([nBurst_threshold0 nBurst_threshold0], [0 max(h.Values)],':r','DisplayName','threshold');
     text(nBurst_threshold0, max(h.Values)/2,'threshold');
     xlabel('Number of burst events');       ylabel('Number of neurons');
-    title(sprintf('Histogram: number of burst events during the first condition (%g bursting neurons out of %g neurons)',  n_bursting0, n_clusters));
+    title(sprintf('Histogram: number of burst events during the baseline (%g bursting neurons out of %g neurons)',  n_bursting0, n_clusters));   % (revised November 2026: the baseline, not the first condition)
 
     % Plot the inter-burst interval
     figure;
