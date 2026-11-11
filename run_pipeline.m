@@ -649,8 +649,14 @@ end
 function recs = read_recordings(file, base_dir)
 
 % function to read the recordings table (all the columns are read as text, and converted here)
+% (revised November 2026) a .csv table is always read with commas as the delimiter: with file names full of "_" and empty optional
+% columns, MATLAB guessed "_" as the delimiter and no column was found
 
-opts = detectImportOptions(file, 'TextType', 'string', 'VariableNamingRule', 'preserve');
+if endsWith(lower(string(file)), ".csv")
+    opts = detectImportOptions(file, 'TextType', 'string', 'VariableNamingRule', 'preserve', 'FileType', 'text', 'Delimiter', ',');
+else
+    opts = detectImportOptions(file, 'TextType', 'string', 'VariableNamingRule', 'preserve');
+end
 opts = setvartype(opts, opts.VariableNames, 'string');
 T = readtable(file, opts);
 names = string(T.Properties.VariableNames);
