@@ -776,3 +776,127 @@ INPUT:	- folder:    	path to localize the data file to plot
 
  	- option:	select one out of multiple forms of plotting (and set the specific parameters)
 
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%%%	cNEDetection		%%%	(new, October 2026; robust definition, November 2026; not called by the pipeline)
+
+Function to detect coordinated neuronal ensembles (cNEs), groups of units that repeatedly fire together within the same 15-ms bin. Reimplementation of the method of See et al. 2018 (eLife 7:e35587), based on Lopes-dos-Santos et al. 2013 (J Neurosci Methods 220:149-166), whose code was not shared: z-scored spike counts -> number of cNEs = eigenvalues of the correlation matrix above a bound -> fastICA on the significant principal components (IC weights) -> cNE activity (projection of each IC onto the z-scored counts). Membership (null mean +/- 1.5 sd of the IC weights) and activity (99.9th percentile) thresholds come from 100 matrices in which each unit's binned spike train is circularly shifted.
+
+Robust definition (November 2026, default parameters), so that the cNEs are reproducible, also on large recordings (up to 1059 units tested). On 17 recording-conditions, the cNEs of the odd and of the even 30-s blocks of the window were found in both halves in 86% of the cases and were nearly identical in 68% (63% and 23% with the steps of See et al.):
+
+ 	- units: only the units that fire at least 0.5 Hz in the window (MIN_RATE). The rarely firing units made spurious components (a single spike gives them a very large z-score)
+
+ 	- number of cNEs: eigenvalues above the 99th percentile of the largest eigenvalue of 100 circularly shifted matrices (N_CNE_RULE "shift"), instead of the Marcenko-Pastur bound ("MP"), which let through 3-7 times more components. Known limitation: a group of units that share slow rate changes (e.g., seconds-long high-rate states) raises this bound for every component, which can hide a weaker ensemble (synthetic example in the test)
+
+ 	- consensus: the detection is run on 10 resamples of the window (N_RESAMPLE), each made of 80% of its 30-s blocks; the components with at least 3 members are clustered by weight similarity (cosine, cut at 0.5), and a cNE is a cluster found in at least 7 of the 10 resamples, represented by its centrotype (weights and members of that component). cNE.stability = fraction of the resamples where it was found. N_RESAMPLE = 0: a single run on the whole window
+
+ 	- activation: a cNE is active in a bin when (1) its activity is above the 99.9th percentile of its null activity (See et al.) and (2) more of its members fire in the bin than expected by chance, with at least 2 members firing (MEMBER_COUNT_RULE). Rule (1) alone was crossed in bins where 0 or 1 member fired: the activity squares the projection, so many non-members with small negative weights firing together also raise it
+
+ 	- chance for the rule (2): interval jitter (COUNT_NULL "jitter"). The bins are grouped in 5-s windows (JITTER_WINDOW), and each spike of a member is moved to a random bin of its window, so the rate changes slower than 5 s are kept; a bin passes when the probability of at least the observed number of members firing is below 0.001 (computed exactly, without surrogates). The first version compared the count with circularly shifted trains (COUNT_NULL "shift"; 99.9th percentile of 200 surrogates), which also removes the slow rate changes: cNEs whose members fire at high rates together for seconds (e.g., after network bursts) were "active" in most bins of those periods. The window sets which rate changes count as a shared state (slower than the window) and which as coordination (faster); network bursts count as coordination with any window of 2-5 s. The window favors the activations inside network bursts, which the cNEs are meant to describe: with 5-s windows, 35 of the 37 cNEs of the recordings with large network events stayed active in as many of them as with the first version, and the activations of the cNEs above more than 1 s from any large event fell by 62-94%. 2-s windows removed more of those (87-98%), but the small cNEs (3-7 members) lost up to all of their large events; windows of 0.5 s or less kept only 1-3 bins per event
+
+The steps of See et al. alone: struct('MIN_RATE', 0, 'N_CNE_RULE', "MP", 'N_RESAMPLE', 0, 'MIN_MEMBERS', 0, 'MEMBER_COUNT_RULE', false, 'BIN_SIZE', 10). Checked by `tests/test_cNEDetection.m` (planted ensembles; a dense implementation of the same method, also of the shifted-data bound and of both versions of the member-count rule; each resample = a single run on its blocks; synthetic slow co-modulation).
+
+Tracking (November 2026; TEMPLATE = the output of `cNEDetection` for another window of the same units, e.g., the baseline before a drug): no new cNEs are detected; the cNEs of the template keep their weights and members, and their activation is computed on this window with the activation settings of the template (bin size, both rules, their percentiles and nulls) applied to this window's counts and spike trains. The units analyzed are those of the template that fire in this window, also below MIN_RATE (a drop of the rate is part of a change); a member silent in the window cannot fire. Tracking on the window of the detection gives its activations exactly (checked by `tests/test_cNECompare.m`). Used by `cNECompare`. A window where fewer than 2 units are analyzed (e.g., a silenced network) now gives no cNEs instead of an error.
+
+Chance level of the activations (November 2026, N_CHANCE = 20): both activation rules are applied, with the thresholds of the real data, to 20 surrogates in which every spike of every unit analyzed is moved to a random bin of its 5-s jitter window (the null of rule (2)); cNE.chanceEvents(k) = mean number of active bins of the cNE k on the surrogates. The rules test each bin at 0.1%, so a cNE whose members rarely fire together can have a large part of its activations at chance level; see `cNEAnalysis` (chance share, excess rate, flag). It does not change the cNEs or their activations (own random generator), and adds little time.
+
+INPUT:	- spikeTimestamp:	structure array with the field .timeStamp (in msec), or a cell array of spike times (in msec)
+
+ 	- tRange:		[start end] of the analysis window, in sec (with the consensus, at least 3 blocks of 30 sec)
+
+ 	- inputs:		(optional) structure that overwrites the PARAMETERS (BIN_SIZE, MIN_RATE, N_CNE_RULE, N_SHIFT_EIG, EIG_PERCENTILE, N_RESAMPLE, RESAMPLE_BLOCK, RESAMPLE_FRACTION, MIN_RESAMPLES, CLUSTER_SIMILARITY, MIN_MEMBERS, N_SHUFFLE, MEMBER_SD, ACTIVITY_PERCENTILE, MEMBER_COUNT_RULE, COUNT_NULL, JITTER_WINDOW, COUNT_PERCENTILE, N_SHIFT_COUNT, MIN_FIRING, ICA_CONTRAST, ICA_MAX_ITER, ICA_TOL, SEED, N_CHANCE); TEMPLATE for the tracking
+
+OUTPUT:	- cNE.nCNE, cNE.weights(i,k):		number of cNEs, and IC weight of the unit i in the cNE k
+
+ 	- cNE.members{k}, cNE.negativeMembers{k}:	units with a weight above / below the membership thresholds (cNE.memberThreshold(k,:))
+
+ 	- cNE.stability(k), cNE.similarity(k):	fraction of the resamples where the cNE k was found, and mean weight similarity within its cluster
+
+ 	- cNE.activity(k,b), cNE.activityThreshold(k):	activity of the cNE k in the bin b, and the threshold of the rule (1)
+
+ 	- cNE.membersNeeded(k):			members that must fire in a bin for the rule (2) with COUNT_NULL "shift" (NaN with "jitter", where it changes from bin to bin)
+
+ 	- cNE.events{k}, cNE.eventTimes{k}:		bins in which the cNE k is active (both rules), and their midpoint (in msec); cNE.activityEvents{k} and cNE.memberCountEvents{k}: bins that pass each rule
+
+ 	- cNE.chanceEvents(k):			active bins of the cNE k expected by chance (interval-jitter surrogates; NaN with N_CHANCE = 0)
+
+ 	- cNE.rate, cNE.active:			firing rate of each unit in the window, and the units analyzed
+
+ 	- cNE.resamples(r):			blocks, number of components, bound, weights and members of each resample
+
+ 	- cNE.eigenvalues, cNE.lambdaMax, cNE.lambdaMP, cNE.binTime, cNE.nullWeight, cNE.icaConverged, cNE.parameters
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%%%	cNEAnalysis		%%%	(new, November 2026; not called by the pipeline)
+
+Function to describe the network activity of one recording-condition with its cNEs (output of `cNEDetection`): when each cNE is active relative to the network events of option 5 of `NetworkBurstDetection`, in which order the cNEs are active within the large events, and which cNEs the small and the secondary events recruit. The cNEs do not detect network events; they extend their analysis.
+
+ 	- periods: each 15-ms bin of the cNE detection belongs to one period, by precedence: secondary (secondary events) > core (large events, start to end) > small (small events) > tail (end of a large event to the end of its closed zone) > onset (the 0.5 s before the start of a large event, ONSET_WINDOW) > quiet baseline. Per cNE: share of its activations and activations per minute in each period
+
+ 	- time of a cNE in an event: 25th percentile of the times of its active bins, from the start of the event (with fewer than 4 active bins: midpoint of the first one and the median). Windows: large events from 0.5 s before their start (after the previous tail) to the end of their tail (before the next onset); small events from 0.5 s before their start (outside the large events, onsets and tails) to their end; secondary events from start to end. Template = median time of each cNE over the large events (rank, and position from 0 = first to 1 = last)
+
+ 	- order of the large events: consistency S = sum_ij n_ij |2 p_ij - 1| / sum_ij n_ij over the pairs of cNEs, against a null that permutes the times among the active cNEs of each event (2000 permutations), reported scaled to chance, (S - S0)/(1 - S0) (0 = chance, 1 = the same order in every event), with its p; per-event match = Kendall tau between each event and the template of the other events (median); span of the template (sec, and as a fraction of the duration of the large events); timing of the order (November 2026): for each pair of cNEs active together in at least 3 large events, the lag between them in each of these events (later minus earlier cNE of the template), its median (summary.orderLag) and its median absolute deviation (summary.orderJitter: how precise the timing is), in sec, medians over the pairs
+
+ 	- small and secondary events: % with an active cNE, mean % of the cNEs an event recruits, over the events that recruit at least one (November 2026), mean template position of the cNEs they recruit (0 = leading, 1 = late), agreement with the template order (share of the pairs of active cNEs in that order; 0.5 = chance), with its p; also the consistency of their own order, with its p (small events: November 2026, with its own generator of permutations, so that the other p values do not change)
+
+ 	- member participation: share of the members of a cNE that fire in each of its active bins (median; also inside and outside the large events). It falls with the number of members, so it is meant to compare a cNE with itself (e.g., across conditions)
+
+ 	- roles (a cNE can have several): core (largest share in the core), leader (active in the onset of at least 25% of the large events), tail (at least 30% of its activations in the tails and active in at least 50% of them), reverberation (active in at least 50% of the secondary events), small-event (active in at least 50% of the small events), baseline (largest share in the quiet baseline); the reverberation and small-event roles need at least 3 events of that type
+
+ 	- minimums: the order measures need at least 2 cNEs (November 2026; was 3) and 5 large events (with 2 cNEs, the order is which cNE leads: the consistency tells whether the same one leads in every event, and the per-event match stays blank, as it needs 3 active cNEs in an event); the comparisons of the small and secondary events, at least 3 events with an active cNE (position) or with 2 active cNEs (agreement, own order)
+
+ 	- chance level (November 2026): activations expected by chance (cNE.chanceEvents of `cNEDetection`) as a rate and as a share of the activations; excess rate = activation rate - chance rate; a cNE is flagged at chance (atChance) when the chance level is at least 50% of its activations (MAX_CHANCE_SHARE). Nothing is left out: the flag tells which activation counts are mostly what the rules let through by chance
+
+ 	- reference order (REFERENCE_TIME, for `cNECompare`): with the template of the same cNEs in a reference condition, the large events of this condition are compared with that order: agreement A (as for the small events; at least 2 cNEs and 3 events with 2 active cNEs that have a reference time) with its p, and Kendall tau-b between the two templates (at least 3 cNEs with both times; summary.referenceAgreement, referenceAgreementP, referenceMatch)
+
+ 	- events the cNEs do not describe: when fewer than 50% of the large events have an active cNE (summary.notDescribed), the roles, the times of the cNEs and the order and event-type measures are left blank; the periods and the share of the events where each cNE is active are kept. No large event in the window (summary.noBursting): only the cNEs, their activation rates and member participation. Only the events entirely inside the window of the cNE detection are counted
+
+Checked by `tests/test_cNEAnalysis.m` (synthetic activations and network events with known answers) and, on 17 recording-conditions, against the separate scripts with which the measures were designed (same periods, times per event, templates, onset leads, member participation and roles).
+
+INPUT:	- cNE:			output of `cNEDetection` for the condition
+
+ 	- NetworkBurstDetected:	output of `NetworkBurstDetection` (option 5) for the same condition ([] or nBurst = 0: no network events)
+
+ 	- spikeTimestamp:	(optional) spike trains given to `cNEDetection`, for the member participation ([]: not computed)
+
+ 	- inputs:		(optional) structure that overwrites the PARAMETERS (ONSET_WINDOW, TIME_PERCENTILE, MIN_BINS_TIME, N_PERM, SEED, MIN_COVERAGE, MIN_CNE_ORDER, MIN_LARGE_ORDER, MIN_EVENTS_TYPE, MIN_EVENTS_ROLE, LEADER_ONSETS, TAIL_SHARE, TAIL_COVER, REVERBERATION_COVER, SMALL_COVER, REFERENCE_TIME, MAX_CHANCE_SHARE)
+
+OUTPUT:	- report.summary:		one row per condition: units and cNEs, members, % of units in a cNE, activation rate, excess rate and number of cNEs at chance, member participation; number of events of each type, % of the large events with an active cNE and the flags; % of time and median share of the activations in each period; number of cNEs per role and the lead of the leaders; order consistency (scaled, p), per-event match, span, lag and jitter between the cNEs; small and secondary events (% with a cNE, mean % of the cNEs recruited by the events with a cNE, position, agreement, own order, and their p); with REFERENCE_TIME, the large events against the reference order
+
+ 	- report.cNEs:			table, one row per cNE: members (and their cluster ids, to track the cNE across conditions), stability, activation rate, chance rate, excess rate, chance share and flag, member participation, share and rate in each period, % of the large events, onsets, tails, small and secondary events where it is active, onset lead, template time, rank, position, roles
+
+ 	- report.events:		per event (large, small, secondary): limits, time of each cNE, active bins; large events, also the per-event match and the share of the events where each cNE is active at each lag from their start
+
+ 	- report.binPeriod, report.periods, report.parameters:	period of each bin of the cNE detection, names of the periods, parameters used
+
+ 	- fig:			(only if requested) shares of the periods with the roles, activity of each cNE around the large events, and participation in each type of event
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%%%	cNECompare		%%%	(new, November 2026; not called by the pipeline)
+
+Function to compare the cNEs of two conditions of the same recording, e.g., the baseline and a drug, or the two halves of the baseline (the change that time alone brings, to compare a drug with). Two complementary views:
+
+ 	- tracking: the cNEs of the reference condition are followed in the test condition (same weights and members; activation on the test condition's own data, `cNEDetection` with TEMPLATE), and both conditions are described with `cNEAnalysis` (each with its own network events; the test condition also against the order of the reference). Per cNE: activation rate, mean firing rate of its members (if the activations fall more than the members' rates, the members fire less together, not only less), member participation, share of the large events where it is active, roles and position in the order, in both conditions
+
+ 	- separate detection: the cNEs of the test condition are detected on their own and matched one to one with the reference cNEs by weight similarity (cosine; greedy from the most similar pair; at least 0.5, MATCH_SIMILARITY, the cut of the consensus of `cNEDetection`): reference cNEs found again, lost, and new cNEs
+
+Ratios are test/reference (NaN when the reference value is 0). The excess rates over chance are compared too (excess ratio; the excess of the test condition counted as 0 when negative), and the reference cNEs whose activations are mostly at chance are flagged and left out of the median excess ratio. Checked by `tests/test_cNECompare.m` (synthetic ensembles kept, uncoordinated at the same rates, silenced and new; no change with large network events in a fixed order, and the order reversed; silenced test window).
+
+INPUT:	- reference, test:	one structure per condition: spikeTimestamp (the same units, in the same order, in both; checked with .cluster), tRange ([start end], in sec), and optionally NetworkBurstDetected (option 5), name, and cNE (a detection of that window, to reuse it)
+
+ 	- inputs:		(optional) structure that overwrites the PARAMETERS (MATCH_SIMILARITY; DETECTION and ANALYSIS: inputs passed to `cNEDetection` and `cNEAnalysis`)
+
+OUTPUT:	- comparison.summary:		reference cNEs and cNEs detected in the test condition; found, lost, new, % found, median best similarity; % of the reference cNEs active in the test condition; median ratios of the activation rates, of the excess rates (cNEs not at chance) and of the member firing rates; reference cNEs at chance; median change of member participation and of the share of the large events; roles kept, lost and gained (NaN when a condition has no roles); the large events of the test condition against the reference order (agreement, p, template match); large events and flags of both conditions
+
+ 	- comparison.cNEs:		table, one row per reference cNE: members, cluster ids, silent members in the test window, activation rate, chance share, excess rate (and their ratios), flag at chance, member firing rate, member participation, share of the large events, position and roles in both conditions, ratios, matched test cNE and its similarity, best similarity
+
+ 	- comparison.similarity, comparison.newCNEs:	weight similarity of each reference cNE with each test cNE; test cNEs not matched
+
+ 	- comparison.reference, comparison.tracked, comparison.detected, comparison.test, comparison.parameters:	the cNEs and `cNEAnalysis` reports of the reference, of the tracked cNEs in the test window and of the separate detection; names and windows; parameters used
+
+ 	- fig:			(only if requested) activation rate and member firing rate of each reference cNE in both conditions, and the weight similarity with the cNEs detected in the test condition
