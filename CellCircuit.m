@@ -81,7 +81,7 @@ stop_button = uibutton(bar, 'Text', 'Stop', 'Enable', 'off', 'ButtonPushedFcn', 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Tab 1: recordings
 
-g1 = uigridlayout(tab_rec, [4 1], 'RowHeight', {'fit', 'fit', '1x', 'fit'});
+g1 = uigridlayout(tab_rec, [5 1], 'RowHeight', {'fit', 'fit', 'fit', '1x', 'fit'});
 uilabel(g1, 'WordWrap', 'on', 'Text', ['One row per recording, each in its own folder. Tick "include" to run it. "group": the recordings of the ' ...
     'same group are compiled together in one Excel file. "file_name": the common name of the files of the recording (for a new Kilosort ' ...
     'recording, the name you choose for its files). Optional: "to_discard", units to discard by hand (e.g., 3 17 25); "source", Kilosort or ' ...
@@ -99,7 +99,14 @@ uibutton(b1, 'Text', 'Set group of selected rows', 'ButtonPushedFcn', guard(@on_
 uibutton(b1, 'Text', 'Save', 'ButtonPushedFcn', guard(@(~,~) save_table(false)));
 uibutton(b1, 'Text', 'Save as...', 'ButtonPushedFcn', guard(@(~,~) save_table(true)));
 table_label = uilabel(b1, 'Text', 'No table yet', 'FontAngle', 'italic');
-rec_table = uitable(g1, 'Data', empty_rows(0), 'ColumnEditable', true, 'SelectionType', 'row', 'Multiselect', 'on', ...
+% (new, user's request) tick or untick "include" for every recording in one click, e.g., untick all and tick the few to run
+b_inc = uigridlayout(g1, [1 3], 'ColumnWidth', {80, 90, '1x'}, 'Padding', [0 0 0 0]);
+tick_all_button = uibutton(b_inc, 'Text', 'Tick all', 'ButtonPushedFcn', guard(@(~,~) set_include(true)), ...
+    'Tooltip', 'Tick "include" for every recording');
+untick_all_button = uibutton(b_inc, 'Text', 'Untick all', 'ButtonPushedFcn', guard(@(~,~) set_include(false)), ...
+    'Tooltip', 'Untick "include" for every recording, then tick the few recordings to run');
+include_label = uilabel(b_inc, 'Text', '', 'FontWeight', 'bold', 'FontColor', [0 0.45 0]);
+rec_table =uitable(g1, 'Data', empty_rows(0), 'ColumnEditable', true, 'SelectionType', 'row', 'Multiselect', 'on', ...
     'CellEditCallback', guard(@on_table_edit), 'ColumnWidth', {55, 330, 170, 90, 90, 80, 100, 110, 90, 120});
 uilabel(g1, 'Text', 'Tip: you can also edit the table in Excel and open it again here. Save the table before closing; Run saves it for you.', ...
     'FontColor', [0.4 0.4 0.4]);
@@ -388,6 +395,33 @@ end
         table_dirty = true;
         update_table_label();
         update_summary();
+    end
+
+    function set_include(value)
+        % ticks (true) or unticks (false) "include" for every recording of the table
+        T = rec_table.Data;
+        if height(T) == 0
+            set_status('The table has no recording yet.');
+            return
+        end
+        T.include(:) = value;
+        rec_table.Data = T;
+        table_dirty = true;
+        update_table_label();
+        update_summary();
+        if value
+            set_status(sprintf('All %d recordings are ticked.', height(T)));
+        else
+            set_status('All recordings are unticked: tick the ones to run (column include).');
+        end
+    end
+
+    function update_include_label()
+        % number of recordings ticked, next to the buttons Tick all / Untick all
+        T = rec_table.Data;
+        n = nnz(T.include);
+        include_label.Text = sprintf('%d of %d recordings ticked (column include)', n, height(T));
+        include_label.FontColor = ifelse(n == 0 && height(T) > 0, [0.8 0 0], [0 0.45 0]);
     end
 
     function on_table_edit(~, ~)
@@ -973,6 +1007,7 @@ end
     end
 
     function update_summary()
+        update_include_label();
         if ~exist('summary_area', 'var') || ~isvalid(summary_area)
             return
         end
@@ -1234,6 +1269,8 @@ end
         stop_button.Enable = on;
         stop_button.Text = 'Stop';
         rec_table.ColumnEditable = ~on;
+        tick_all_button.Enable = ~on;
+        untick_all_button.Enable = ~on;
         param_table.ColumnEditable = [false false ~on false false];
         for c = [what_mode, from_stage, only_checks, param_mode, renew_list]
             c.Enable = ~on;
@@ -1337,7 +1374,7 @@ end
 
     function on_help(~, ~)
         txt = sprintf(['1. Recordings: open a recordings table, or press "Add recordings from folder..." and fill in the group of each ' ...
-            'recording. Tick "include" for the recordings to run.\n\n2. Settings: choose what to run (the whole pipeline the first time; ' ...
+            'recording. Tick "include" for the recordings to run (to run only a few: "Untick all", then tick them).\n\n2. Settings: choose what to run (the whole pipeline the first time; ' ...
             'later, e.g., from "7. Analyze" to rerun the analysis), and the parameters (the default values the first time; "the values ' ...
             'saved for each recording" to rerun with the same settings). To change a value only for this run, search it and type the new ' ...
             'value.\n\n3. Run: press Run. The progress table fills in after each stage; the results of each recording are saved next to its ' ...

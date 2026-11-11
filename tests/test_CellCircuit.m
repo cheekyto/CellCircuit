@@ -37,6 +37,18 @@ assert(isequal(c.rec_table.Data.group, ["groupB"; "groupA"; "groupB"]), "the gro
 b_remove = findall(fig, 'Type', 'uibutton', 'Text', 'Remove selected');
 c.rec_table.Selection = [2 3];   b_remove.ButtonPushedFcn(b_remove, []);
 assert(isequal(c.rec_table.Data.file_name, "a"), "Remove did not remove every selected row");
+% "Untick all" / "Tick all" set the column include of every row, and the count next to them follows
+t.open_table(fullfile(folder, 'three.csv'));
+b_untick = findall(fig, 'Type', 'uibutton', 'Text', 'Untick all');   b_tick = findall(fig, 'Type', 'uibutton', 'Text', 'Tick all');
+count = @() ticked_text(fig);
+assert(count() == "3 of 3 recordings ticked (column include)", "wrong count: %s", count());
+b_untick.ButtonPushedFcn(b_untick, []);
+assert(~any(c.rec_table.Data.include) && count() == "0 of 3 recordings ticked (column include)", "Untick all did not untick every row");
+assert(any(contains(t.check(), "No recording is included")), "no recording ticked was not reported");
+c.rec_table.Data.include(2) = true;   c.rec_table.CellEditCallback(c.rec_table, []);
+assert(count() == "1 of 3 recordings ticked (column include)", "the count did not follow a tick: %s", count());
+b_tick.ButtonPushedFcn(b_tick, []);
+assert(all(c.rec_table.Data.include) && count() == "3 of 3 recordings ticked (column include)", "Tick all did not tick every row");
 % other columns of the user are kept when rows are added and when the table is saved
 writetable(table([1;1], ["rec1";"rec2"], ["a";"b"], ["g";"g"], ["note 1";"note 2"], 'VariableNames', {'include', 'folder', 'file_name', 'group', 'notes'}), ...
     fullfile(folder, 'notes.xlsx'));
@@ -131,6 +143,14 @@ fig2.CloseRequestFcn(fig2, []);                                             % (t
 assert(~isvalid(fig2), "the window opened without output could not be closed");
 fprintf('test_CellCircuit: all checks passed\n');
 
+end
+
+function txt = ticked_text(fig)
+% text of the count of recordings ticked, next to the buttons Tick all / Untick all
+labels = findall(fig, 'Type', 'uilabel');
+txt = string({labels.Text});
+txt = txt(contains(txt, "recordings ticked"));
+assert(isscalar(txt), "the count of recordings ticked was not found");
 end
 
 function P = current_prefs()

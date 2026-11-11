@@ -119,7 +119,7 @@ Only the progress is printed; the messages of each stage go to a log file next t
 ```
 
 **Without writing code: the CellCircuit window.** Type `CellCircuit` in MATLAB (or click CellCircuit in the Apps tab, once the install file is installed, see below). The window has three tabs:
-1. **Recordings:** open a recordings table, or add the recordings found in a folder, and fill in the group of each one; tick the recordings to run.
+1. **Recordings:** open a recordings table, or add the recordings found in a folder, and fill in the group of each one; tick the recordings to run ("Tick all" / "Untick all" set every row in one click).
 2. **Settings:** what to run (the whole pipeline, from a stage to the end, or some stages), which parameters (the default values, the values saved for each recording by its last run, or another file), and single values to change for this run. The values that may need adjusting for a recording (about 15, e.g., the minimum number of units of a network burst, or the threshold of the large events) are listed first, with a plain description; every other parameter is under "All parameters (advanced)". Each user can move parameters between the two lists (at most 15 common adjustments); the window keeps each user's list, and the default one is in `common_parameters.m`.
 3. **Run:** the progress of each recording and stage, the messages of the run, and buttons to open the logs and the Excel results. Stop ends the run after the stage that is running. The equivalent `run_pipeline` command is shown, to repeat the run in a script.
 
