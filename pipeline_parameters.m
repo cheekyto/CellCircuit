@@ -469,6 +469,61 @@ P.NetworkBurstStructure.MIN_BURST_PLOT = 3;
 
 
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%  7f) Coordinated neuronal ensembles (new, November 2026): "Analyze_cNE", run by "Analyze_spikeTrain" when CNE_ANALYSIS = 1
+%       The inputs of a single call (TEMPLATE of cNEDetection, REFERENCE_TIME of cNEAnalysis, DETECTION and ANALYSIS of cNECompare) are
+%       set by "Analyze_cNE" and are not parameters. See docs/cNE_METRICS.md and docs/FUNCTION_REFERENCE.md
+
+% cNEDetection
+P.cNEDetection.BIN_SIZE = 15;                                   % bin size, in msec (See et al.: 10 ms)
+P.cNEDetection.MIN_RATE = 0.5;                                  % minimum firing rate in the window, in Hz, for a unit to be analyzed (0: every unit with spikes)
+P.cNEDetection.N_CNE_RULE = "shift";                            % number of cNEs: "shift" = bound from circularly shifted data; "MP" = Marcenko-Pastur bound (See et al.)
+P.cNEDetection.N_SHIFT_EIG = 100;                               % ("shift") number of circularly shifted matrices for the bound
+P.cNEDetection.EIG_PERCENTILE = 99;                             % ("shift") the bound is this percentile of the largest eigenvalue of the shifted matrices
+P.cNEDetection.N_RESAMPLE = 10;                                 % consensus: number of resamples of the window (0: a single run on the whole window, as See et al.)
+P.cNEDetection.RESAMPLE_BLOCK = 30;                             % consensus: length of the blocks, in sec
+P.cNEDetection.RESAMPLE_FRACTION = 0.8;                         % consensus: fraction of the blocks in each resample
+P.cNEDetection.MIN_RESAMPLES = 7;                               % consensus: a cNE must be found in at least this number of resamples
+P.cNEDetection.CLUSTER_SIMILARITY = 0.5;                        % consensus: the clusters of components are cut at this weight similarity (cosine)
+P.cNEDetection.MIN_MEMBERS = 3;                                 % the cNEs with fewer members are dropped
+P.cNEDetection.N_SHUFFLE = 100;                                 % number of circularly shifted matrices for the null distributions (See et al.: 100)
+P.cNEDetection.MEMBER_SD = 1.5;                                 % membership threshold: null mean +/- this number of standard deviations of the IC weights (See et al.: 1.5)
+P.cNEDetection.ACTIVITY_PERCENTILE = 99.9;                      % activation rule (1): percentile of the null cNE activity (See et al.: 99.9)
+P.cNEDetection.MEMBER_COUNT_RULE = true;                        % activation rule (2), on top of the rule (1): enough members fire in the bin (false: rule (1) only, as See et al.)
+P.cNEDetection.COUNT_NULL = "jitter";                           % rule (2), chance level of the number of members firing in a bin: "jitter" (interval jitter of each
+                                                                % member's spikes within windows of JITTER_WINDOW sec) or "shift" (circular shifts; first version)
+P.cNEDetection.JITTER_WINDOW = 5;                               % rule (2), "jitter": length of the jitter windows, in sec
+P.cNEDetection.COUNT_PERCENTILE = 99.9;                         % rule (2): a bin passes when P(count >= observed) < 1 - COUNT_PERCENTILE/100 ("jitter"), or percentile ("shift")
+P.cNEDetection.N_SHIFT_COUNT = 200;                             % rule (2), "shift": number of surrogates
+P.cNEDetection.MIN_FIRING = 2;                                  % rule (2): at least this number of members must fire in the bin
+P.cNEDetection.N_CHANCE = 20;                                   % chance level of the activations: number of interval-jitter surrogates (0: not computed)
+P.cNEDetection.ICA_CONTRAST = "logcosh";                        % fastICA nonlinearity: "logcosh", "pow3" or "gauss"
+P.cNEDetection.ICA_MAX_ITER = 1000;                             % maximum number of fastICA iterations
+P.cNEDetection.ICA_TOL = 1e-6;                                  % fastICA convergence: 1 - |cos(angle)| between consecutive estimates of every component
+P.cNEDetection.SEED = 0;                                        % seed for the random number generators (same seed + same inputs = same result)
+
+% cNEAnalysis
+P.cNEAnalysis.ONSET_WINDOW = 0.5;                               % onset of the large events: this time before their start, in sec (also the lead-in of the small events)
+P.cNEAnalysis.TIME_PERCENTILE = 25;                             % time of a cNE in an event: this percentile of the times of its active bins
+P.cNEAnalysis.MIN_BINS_TIME = 4;                                % with fewer active bins: the midpoint of the first one and the median
+P.cNEAnalysis.N_PERM = 2000;                                    % permutations of the nulls of the order consistency and of the agreement
+P.cNEAnalysis.SEED = 1;                                         % seed of the permutations (same seed + same inputs = same result)
+P.cNEAnalysis.MIN_COVERAGE = 50;                                % the cNEs describe the network events if at least this % of the large events have an active cNE
+P.cNEAnalysis.MIN_CNE_ORDER = 2;                                % order measures: minimum number of cNEs
+P.cNEAnalysis.MIN_LARGE_ORDER = 5;                              % order measures: minimum number of large events
+P.cNEAnalysis.MIN_EVENTS_TYPE = 3;                              % small / secondary events: minimum number of events with an active cNE (position) or with 2 (agreement, own order)
+P.cNEAnalysis.MIN_EVENTS_ROLE = 3;                              % reverberation and small-event roles: minimum number of events of that type
+P.cNEAnalysis.LEADER_ONSETS = 25;                               % leader: active in the onset of at least this % of the large events
+P.cNEAnalysis.TAIL_SHARE = 30;                                  % tail: at least this % of its activations in the tails ...
+P.cNEAnalysis.TAIL_COVER = 50;                                  %       ... and active in at least this % of the tails
+P.cNEAnalysis.REVERBERATION_COVER = 50;                         % reverberation: active in at least this % of the secondary events
+P.cNEAnalysis.SMALL_COVER = 50;                                 % small-event: active in at least this % of the small events
+P.cNEAnalysis.MAX_CHANCE_SHARE = 50;                            % a cNE is "at chance" when the activations expected by chance are at least this % of its activations
+
+% cNECompare
+P.cNECompare.MATCH_SIMILARITY = 0.5;                            % separate detection: a cNE matches a cNE of the reference condition with at least this weight similarity (cosine)
+
+
+%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%  8) Compile_MEAproject (per group)
 
 % Compile_MEAproject

@@ -6,7 +6,7 @@ This page lists every measure the three cNE functions compute (`cNEDetection`, `
 - The other measures are still computed and kept in each recording's full results. They are left out of the compiled table only to keep it readable.
 - Exact definitions are in [FUNCTION_REFERENCE.md](FUNCTION_REFERENCE.md) and in the headers of the functions.
 
-**In the pipeline since November 2026.** `Analyze_spikeTrain` runs the cNE functions (through `Analyze_cNE`; `CNE_ANALYSIS` = 1, on by default) and saves every measure in `cNEResults` of each `XXX_Analyzed.mat` file. `Compile_MEAproject` writes the short list below in the sheets "cNEs" and "cNEs vs baseline". To change the short list, edit `CNE_COLUMNS` and `CNE_COMPARE_COLUMNS` in `Compile_MEAproject` (any field of the summaries listed below can be added).
+**In the pipeline since November 2026.** `Analyze_spikeTrain` runs the cNE functions (through `Analyze_cNE`; `CNE_ANALYSIS` = 1, on by default) and saves every measure in `cNEResults` of each `XXX_Analyzed.mat` file. `Compile_MEAproject` writes the short list below in the sheets "cNEs" and "cNEs vs baseline". To change the short list, edit `CNE_COLUMNS` and `CNE_COMPARE_COLUMNS` in `Compile_MEAproject` (any field of the summaries listed below can be added). The settings of the detection and the analysis are in `pipeline_parameters.m` (section 7f) and in the CellCircuit window (All parameters).
 
 ---
 
