@@ -651,6 +651,9 @@ function recs = read_recordings(file, base_dir)
 % function to read the recordings table (all the columns are read as text, and converted here)
 % (revised November 2026) a .csv table is always read with commas as the delimiter: with file names full of "_" and empty optional
 % columns, MATLAB guessed "_" as the delimiter and no column was found
+% (revised November 2026) the rows that are not included (include = 0, no or false) are skipped before they are checked, as the window
+% "CellCircuit" does: it saves every row, also the unticked ones, which may have no group (e.g., a long list where only the few recordings
+% to run were given a group). Before, an unticked row without a group or file name stopped the run
 
 if endsWith(lower(string(file)), ".csv")
     opts = detectImportOptions(file, 'TextType', 'string', 'VariableNamingRule', 'preserve', 'FileType', 'text', 'Delimiter', ',');
@@ -669,6 +672,9 @@ end
 recs = struct('row', {}, 'folder', {}, 'file_name', {}, 'group', {}, 'to_discard', {}, 'organoid_label', {}, 'crop_ellipse', {}, ...
     'crop_excel', {}, 'file_name_3Brain', {}, 'source', {}, 'include', {});
 for r=1:height(T)
+    if ismember(lower(cell_text(T, r, "include")), ["0", "no", "false"])
+        continue                                                            % a row that is not included (not checked; see above)
+    end
     rec.row = r;
     rec.folder = cell_text(T, r, "folder");
     if strlength(rec.folder) == 0 && strlength(cell_text(T, r, "file_name")) == 0
@@ -697,11 +703,9 @@ for r=1:height(T)
     if strcmpi(cell_text(T, r, "source"), "3Brain")
         rec.source = "3Brain";
     end
-    include = lower(cell_text(T, r, "include"));
-    rec.include = ~ismember(include, ["0", "no", "false"]);
+    rec.include = true;                                                     % (the rows not included were skipped above)
     recs(end+1) = rec;                                                      %#ok<AGROW>
 end
-recs = recs([recs.include]);
 
 end
 
