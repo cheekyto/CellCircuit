@@ -3,7 +3,8 @@ function test_CellCircuit()
 % TEST OF THE WINDOW "CellCircuit" (new, November 2026), without data: run it with the main folder on the MATLAB path.
 % It checks that (1) every parameter of "common_parameters" exists in "pipeline_parameters.m", (2) the window opens, with the common
 % adjustments first and every parameter in the advanced view, (3) the values typed are checked against the type of the value of the file,
-% (4) the equivalent command of "run_pipeline" follows the settings, and (5) the window reports the problems that would stop a run.
+% (4) the equivalent command of "run_pipeline" follows the settings, (5) the window reports the problems that would stop a run, and
+% (6, November 2026) a table built from a folder is saved in that folder by default.
 % A run itself needs recordings: see the "progress" option of "run_pipeline".
 
 root = fileparts(fileparts(mfilename('fullpath')));
@@ -141,6 +142,19 @@ assert(isscalar(fig2), "the window opened without output was not found");
 fig2.UserData.test.check();
 fig2.CloseRequestFcn(fig2, []);                                             % (the button Close of the window)
 assert(~isvalid(fig2), "the window opened without output could not be closed");
+% (November 2026) a table built from a folder and not saved yet: the folder whose recordings were added is suggested for the table (and so
+% for the Excel results, saved next to it), instead of the current folder of MATLAB
+project = fullfile(folder, 'project');   mkdir(fullfile(project, 'recX'));
+x = 1;   save(fullfile(project, 'recX', 'recX_QCmanual.mat'), 'x');
+fig3 = CellCircuit('test', true);
+closer3 = onCleanup(@() delete(fig3));
+t3 = fig3.UserData.test;
+assert(t3.start_folder() == string(pwd), "without a table and without recordings added, the current folder is not suggested");
+assert(t3.add_folder(string(project)) == 1, "the recording of the folder was not added");
+assert(t3.start_folder() == string(project), "the folder whose recordings were added is not suggested for the table");
+t3.open_table(file);
+assert(t3.start_folder() == string(fileparts(file)), "the folder of the opened table is not suggested");
+fprintf('a table built from a folder is saved there by default\n');
 fprintf('test_CellCircuit: all checks passed\n');
 
 end
