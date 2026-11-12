@@ -6,6 +6,8 @@ function passed = test_baseline_condition(code_dir)
 %      first condition, as before)
 %   2. "Analyze_spikeTrain" on a synthetic recording (8 units) whose TTX condition is listed first: the baseline is saved as "Baseline"
 %      (with its own window) and the TTX condition as "+TTX"; with the usual order, the labels are the same as before
+%   3. (November 2026) two conditions with the same label (two TTX files): both are "+TTX", and each one has its own network-burst plot
+%      (the index of the condition is added to their names; before, the second one overwrote the first one); the other names are unchanged
 %
 % Example (from a terminal):
 %   matlab -batch "addpath('<repo>/tests'); test_baseline_condition('<repo>')"
@@ -98,6 +100,20 @@ end
 ok_first = isequal(labels(1,:), ["+TTX", "Baseline"]) && files(1,2) == "rec_D3.brw" && isequal(windows{1,2}, [600 1200]) && isequal(windows{1,1}, [0 300]);
 ok_usual = isequal(labels(2,:), ["Baseline", "+TTX"]) && files(2,1) == "rec_D3.brw" && isequal(windows{2,1}, [600 1200]);
 passed = report(passed, ok_first && ok_usual, sprintf('2. Analyze_spikeTrain: TTX listed first -> %s / %s; usual order -> %s / %s', labels(1,1), labels(1,2), labels(2,1), labels(2,2)));
+
+%% 3. two conditions with the same label: each one keeps its own network-burst plot
+rec_conditions = {'rec_D3.brw', [300 1200]; 'rec_D3_ttx_00.brw', [0 150]; 'rec_D3_ttx_01.brw', [150 300]};
+name = 'synthetic3_curated';
+save(fullfile(folder, [name '_QCmanual.mat']), 'spikeTimestamp', 'rec_conditions', 'n_clusterOriginal', 'n_cluster_Kilosort', 'n_cluster_3Brain');
+inputs = struct('folders', string(folder), 'files_data', string(name), 'condition_analysis', -1, 'window', 600, 'opt_rerun', 0, ...
+    'print_Plots', 1, 'HIDE_PLOTS_MIN_RECORDINGS', 1, 'plot_option', 0, 'plot_network_burst', 0, 'opt_checking', 0, 'system', 0, 'CNE_ANALYSIS', 0);
+evalc('Analyze_spikeTrain(inputs)');
+S = load(fullfile(folder, [name '_Analyzed.mat']), 'PerCondition');
+labels3 = string({S.PerCondition.condition});
+d = dir(fullfile(folder, [name '_NetBurst_*.fig']));
+plots = sort(string(erase({d.name}, [name '_NetBurst_'])));
+passed = report(passed, isequal(labels3, ["Baseline", "+TTX", "+TTX"]) && isequal(plots, sort(["Baseline.fig", "+TTX_2.fig", "+TTX_3.fig"])), ...
+    sprintf('3. two conditions labelled %s: network-burst plots %s', labels3(2), strjoin(plots, ', ')));
 
 end
 
