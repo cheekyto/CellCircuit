@@ -50,6 +50,8 @@ common_default = common_parameters();   % the few parameters shown first ("Commo
 common = load_common_list();        % the list of this user: the default one, or the one changed in the window (MATLAB preferences)
 selected_rows = [];                 % rows of the parameter table selected by the user
 table_file = "";                    % file of the recordings table ("" = not saved yet)
+added_folder = "";                  % (new, November 2026) last folder whose recordings were added: until the table is saved, its folder
+                                    % is suggested for the table (and so for the Excel results, saved next to it)
 table_dirty = false;                % the table was edited since it was opened or saved
 params = [];                        % list of every parameter (see "read_parameter_list")
 changes = containers.Map('KeyType', 'char', 'ValueType', 'any');   % values changed for this run: 'Function.PARAMETER' -> text typed
@@ -226,7 +228,7 @@ else
     end
 end
 update_summary();
-fig.UserData.test = struct('open_table', @open_table, 'add_folder', @add_folder, 'set_change', @set_change, 'run', @on_run, ...
+fig.UserData.test = struct('open_table', @open_table, 'add_folder', @add_folder, 'start_folder', @start_folder, 'set_change', @set_change, 'run', @on_run, ...
     'add_to_common', @add_to_common, 'set_change_common', @set_change_common, 'remove_from_common', @remove_from_common, 'default_list', @on_default_list, 'common', @get_common, ...
     'stop', @on_stop, 'check', @check_settings, 'command', @command_text, 'save_param_file', @save_param_file, ...
     'controls', struct('group', group_field, 'what_mode', what_mode, 'from_stage', from_stage, 'only_checks', only_checks, 'param_mode', param_mode, ...
@@ -332,6 +334,7 @@ end
             return
         end
         add_rows(found);
+        added_folder = d;
         set_status(sprintf('%d recordings added from %s. Fill in their group, then save the table.', n, d));
     end
 
@@ -1349,10 +1352,14 @@ end
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
     function d = start_folder()
-        % folder of the recordings table (or the current folder)
+        % folder of the recordings table; (revised November 2026) before the table is saved, the last folder whose recordings were added
+        % (before, the current folder of MATLAB: a table built from a folder was saved there by default, and so were the Excel results);
+        % otherwise, the current folder
         d = string(pwd);
         if strlength(table_file) > 0
             d = string(fileparts(table_file));
+        elseif strlength(added_folder) > 0
+            d = added_folder;
         end
     end
 
