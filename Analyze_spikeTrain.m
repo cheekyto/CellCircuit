@@ -59,7 +59,8 @@ plot_network_burst = 1;
 %%%%%%%%%%%%%%%%%%%%%%%%%   OUTPUT   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % matlab file sprintf('%s\\%s\\%s_Analyzed.mat', main_folder, project_folder, file_data), containing the following variables
-%  1) spikeTimestamp, 2) PerCondition, 3) NetworkBurstDetected
+%  1) spikeTimestamp, 2) PerCondition, 3) NetworkBurstDetected, 4) (new, November 2026) cNEResults, the coordinated neuronal ensembles of
+%  each condition and their comparison with the baseline (see "Analyze_cNE" and CNE_ANALYSIS)
 % PerCondition(cond) has the following fields (per each recording condition): 
 %   1) spikeTrain, 2) SpikeFeature, 3) BurstFeature, 4) BurstDetected, 5) BurstFeature_Population, 6) TonicFeature_Population, 7) NetworkBurstFeature, 8) NetworkBurstStructure, 9) condition, 10) window
 
@@ -74,6 +75,9 @@ MIN_UNITS = 5;                              % (new, November 2026; user's choice
                                             % "Compile_MEAproject" reports it with 0 active neurons, 0 Hz and the other metrics blank
 
 MIN_WINDOW = 0.4;                           
+CNE_ANALYSIS = 1;                           % (new, November 2026; user's choice: on by default) =1, the coordinated neuronal ensembles (cNEs) of each
+                                            % condition and their comparison with the baseline ("Analyze_cNE"; saved as "cNEResults", with figures when
+                                            % print_Plots = 1); =0, not computed ("Compile_MEAproject" leaves the cNE sheets blank)
 
 RATIO_MATCH = 0.60;                         % minimum matching between the treatment labels and the filename
 TREATMENT{1} = 'CGP';
@@ -564,6 +568,19 @@ if opt_rerun
 else
     save(file_output, 'spikeTimestamp','PerCondition','n_clusterOriginal','n_conditions','n_cluster_Kilosort','n_cluster_3Brain');
 end
+
+% (new, November 2026; user's choice: on by default) coordinated neuronal ensembles (cNEs): those of each condition, the comparison of each
+% condition with the baseline, and of the 2nd half of the baseline with its 1st half (see "Analyze_cNE"). Run after the results above are
+% saved (a problem with the cNEs cannot lose them); in a rerun, the cNEs of the conditions that were not analyzed again are kept
+if CNE_ANALYSIS
+    cNEResults = [];
+    if opt_rerun && ~isempty(whos('-file', file_output, 'cNEResults'))
+        cNEResults = load(file_output, 'cNEResults').cNEResults;
+    end
+    cNEResults = Analyze_cNE(PerCondition, base_cond, condition_analysis0, cNEResults, ...
+        struct('plots', print_Plots == 1, 'folder', folder, 'file_data', file_data, 'hide', hide_plots));
+    save(file_output, 'cNEResults', '-append');
+end
 toc
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Plot the results
@@ -611,7 +628,7 @@ if print_Plots && ~opt_rerun && n_clusters > 0                             % (re
     save_plot(gcf, file_output, hide_plots)
 
 end
-clear('condition_analysis0', 'spikeTimestamp','PerCondition','n_clusterOriginal','n_cluster_Kilosort','n_cluster_3Brain','rec_conditions');
+clear('condition_analysis0', 'spikeTimestamp','PerCondition','n_clusterOriginal','n_cluster_Kilosort','n_cluster_3Brain','rec_conditions', 'cNEResults');
 end
 
 end

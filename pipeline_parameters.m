@@ -194,6 +194,8 @@ P.Analyze_spikeTrain.MIN_N_BURST = 5;                           % minimum number
 P.Analyze_spikeTrain.MIN_UNITS = 5;                             % (new, November 2026) minimum number of good units to analyze a recording (default: 5); with fewer, the
                                                                 % conditions are saved without analysis, and compiled with 0 active neurons, 0 Hz and the other metrics blank
 P.Analyze_spikeTrain.MIN_WINDOW = 0.4;
+P.Analyze_spikeTrain.CNE_ANALYSIS = 1;                          % (new, November 2026) =1, the coordinated neuronal ensembles (cNEs) of each condition and their
+                                                                % comparison with the baseline ("Analyze_cNE"; figures with print_Plots); =0, not computed
 P.Analyze_spikeTrain.TREATMENT = {'CGP', 'Gabazine', 'DNQX', 'D-AP5', 'TTX'};          % labels of the treatments, matched to the filename of each condition
 P.Analyze_spikeTrain.RATIO_MATCH = 0.60;                        % minimum matching between the treatment labels and the filename
 
