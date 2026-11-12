@@ -88,7 +88,7 @@ Every change that alters a result was reviewed on its own, with its measured eff
 - MATLAB (developed and tested with R2025b), with the Signal Processing Toolbox and the Statistics and Machine Learning Toolbox.
 - [npy-matlab](https://github.com/kwikteam/npy-matlab), to read the Kilosort output.
 
-**1. List the recordings** in a table (see [`recordings_template.csv`](recordings_template.csv)): one row per recording, with its folder, the common name of its files and its group. Optional columns hold the units to discard, the cropping of the electrodes, a 3Brain dataset to integrate, and whether to include the recording.
+**1. List the recordings** in a table (see [`recordings_template.csv`](recordings_template.csv)): one row per recording, with its folder, the common name of its files and its group. Optional columns hold the units to discard, the cropping of the electrodes, a 3Brain dataset to integrate, and whether to include the recording (a row with `include` = 0 is skipped and needs no group, so a long list can hold every recording and run only a few).
 
 **2. Run the pipeline:**
 
