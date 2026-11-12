@@ -15,7 +15,8 @@ High-density MEA chips (e.g., 3Brain, 64 × 64 = 4,096 electrodes) record the el
 1. **Cleans the units**: refractory-period violations, silent and noisy units, response to TTX, and electrical artifacts that appear as hypersynchronous spikes between pairs of units (a shuffle test, 500 iterations).
 2. **Detects bursts** in every unit (maximal-interval method) and **network bursts** across the population: population events detected on an optimized bin size, the units that participate in them (shuffle-based statistics), primary and secondary events, and families of events found by clustering.
 3. **Measures** firing (rate, variability, entropy, mutual information, spike-time tiling), bursting (rate, duration, spikes per burst, intervals) and network bursting (rate, participation, duration, amplitude, temporal structure of the onset and the peak), for every recording condition (e.g., baseline and each drug).
-4. **Compiles** every recording of an experimental group into Excel tables, one row per recording condition, ready for statistics.
+4. **Finds coordinated neuronal ensembles** (cNEs), groups of units that fire together, in every condition: how often they fire, their role and order in the network bursts, and how a drug changes them (against the baseline and against the drug before it, with the two halves of the baseline as the no-drug reference).
+5. **Compiles** every recording of an experimental group into Excel tables, one row per recording condition, ready for statistics.
 
 ```mermaid
 flowchart LR
@@ -37,8 +38,8 @@ flowchart LR
 | `QualityControl_Manual` | Final curation (a list of units to discard, or interactive plots) | `<name>_QCmanual.mat` |
 | `SelectElectrodes` | Keeps the electrodes under the organoid (optional) | `<name>_<organoid>_QCmanual.mat` |
 | `IntegrateDataSets` | Combines Kilosort and 3Brain units, removing duplicates | `<name>_curated_QCmanual.mat` |
-| `Analyze_spikeTrain` | Spiking, bursting and network-burst analysis of every condition | `<name>_curated_Analyzed.mat` |
-| `Compile_MEAproject` | Group tables: firing, bursting, network bursting | `<group>_Compiled.xlsx` |
+| `Analyze_spikeTrain` | Spiking, bursting, network-burst and ensemble (cNE) analysis of every condition | `<name>_curated_Analyzed.mat` |
+| `Compile_MEAproject` | Group tables: firing, bursting, network bursting, ensembles | `<group>_Compiled.xlsx` |
 
 ---
 
@@ -146,9 +147,10 @@ Each stage can also be run by hand, as before (open it, edit its INPUTS section,
 - **For each group:** `<group>_Compiled.xlsx`, with one sheet per type of activity:
   - *Firing*: rate, CV and Fano factors of the inter-spike intervals, spike-count Fano factor, entropy, local variation, mutual information, spike-time tiling coefficient;
   - *Bursting*: rate, duration, spikes per burst, intervals within and between bursts with their variability, and tonic (non-bursting) units;
-  - *Network bursting*: events, participating units, rate and its variability, duration, tail, amplitude, onset and peak structure, families of events and their clustering quality, and secondary events.
+  - *Network bursting*: events, participating units, rate and its variability, duration, tail, amplitude, onset and peak structure, families of events and their clustering quality, and secondary events;
+  - *cNEs*, *cNEs vs baseline* and *cNEs vs previous*: a short list of ensemble measures for each condition, and for each condition against the baseline and against the condition recorded before it; TTX conditions are left out ([docs/cNE_METRICS.md](docs/cNE_METRICS.md) lists the measures, and every other measure kept in `<name>_curated_Analyzed.mat`).
 
-  `<group>_Grouped&Compiled.xlsx` has the same tables, with the rows grouped by treatment. The first row of every sheet gives the units.
+  `<group>_Grouped&Compiled.xlsx` has the firing, bursting and pooled network-bursting tables, with the rows grouped by treatment. The first row of every sheet gives the units.
 
 ---
 

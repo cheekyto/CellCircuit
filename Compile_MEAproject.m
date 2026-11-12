@@ -30,6 +30,11 @@ group = 'groupA';
 
 % Matlab file and Excel file containing the following tables (with population metrics for each recording):
 % 1) Firing;    2) Bursting;    3) NETbursting
+% (new, November 2026) 4) cNEs: the coordinated neuronal ensembles of each condition (its own cNEs; sheet "cNEs"); 5) cNEsVsBaseline: each
+% condition against the baseline, and the 2nd half of the baseline against its 1st half (sheet "cNEs vs baseline"); 6) cNEsVsPrevious: each
+% condition against the condition recorded just before it, when that one is not the baseline (sheet "cNEs vs previous"; see
+% "previousCondition"). The TTX conditions are left out (user's choice). Only the short list of measures (CNE_COLUMNS, CNE_COMPARE_COLUMNS; see docs/cNE_METRICS.md); every measure stays in
+% "cNEResults" of each "_Analyzed.mat" file
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%   PARAMETERS   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -56,6 +61,14 @@ TREATMENT{6} = 'TTX';
 TREATMENT{7} = 'unknown';
 
 COL_COND = 4;
+
+% (new, November 2026; user's choice) columns of the cNE sheets: the short list of docs/cNE_METRICS.md (fields of the summaries of "cNEAnalysis"
+% and "cNECompare"; any other field of these summaries can be added)
+CNE_COLUMNS = {'nCNE', 'medianMembers', 'unitsInCNE', 'activationRate', 'nAtChance', 'memberParticipation', 'largeWithCNE', 'shareCore', ...
+    'shareQuiet', 'nLeader', 'orderConsistency', 'orderMatch', 'orderLag', 'orderJitter', 'smallWithCNE', 'smallRecruited', 'smallAgreement', ...
+    'smallConsistency', 'secondaryWithCNE', 'secondaryRecruited', 'secondaryAgreement', 'secondaryConsistency'};
+CNE_COMPARE_COLUMNS = {'nCNE', 'nCNETest', 'nFound', 'nLost', 'nNew', 'foundShare', 'rateRatio', 'memberRateRatio', 'rolesKept', 'rolesLost', ...
+    'rolesGained', 'referenceAgreement'};
 
 apply_parameters('Compile_MEAproject');                                     % (revised October 2026) values of the parameter set of "run_pipeline", if any (see "pipeline_parameters")
 override_inputs(inputs);                    % overwrite the INPUTS / PARAMETERS above with the ones provided as input (if any)
@@ -127,11 +140,19 @@ CV_ISI_Tonic = nan(n_condition,1);       FFisi_CV2_Tonic = nan(n_condition,1);  
 NETbursting0 = [];
 NETbursting1 = [];
 NETbursting2 = [];
+cne_values = nan(n_condition, numel(CNE_COLUMNS));                          % (new, November 2026) cNEs of each condition (sheet "cNEs")
+cne_note = repmat({''}, n_condition, 1);
+cNEsVsBaseline = [];                                                        % (new, November 2026) each condition against the baseline
+cNEsVsPrevious = [];                                                        % (new, November 2026) ... and against the condition before
 
 idx = 0;
 for i=1:n_recordings                                                        % across all experiments
     file_input = fullfile(folderPath, group, sprintf('%s_Analyzed.mat', Recording{i}));
     load(file_input, 'PerCondition','n_conditions','n_cluster_Kilosort','n_cluster_3Brain');
+    cNEResults = [];                                                        % (new, November 2026) cNEs of the recording, if computed (see "Analyze_cNE")
+    if ~isempty(whos('-file', file_input, 'cNEResults'))
+        cNEResults = load(file_input, 'cNEResults').cNEResults;
+    end
     info = whos('-file', file_input, 'spikeTimestamp');                     % size of "spikeTimestamp", without loading all the spikes
     n_good_clusters = info.size(2);                                         % total number of good clusters (as "size(spikeTimestamp,2)")
 
@@ -165,6 +186,7 @@ for i=1:n_recordings                                                        % ac
         % spiking activity (general)
         T_start(idx) = PerCondition(k).window(1);                           % start of the analysis window, in sec
         T_end(idx) = PerCondition(k).window(2);                             % end of the analysis window, in sec
+        [cne_values(idx,:), cne_note{idx}] = cne_condition(cNEResults, k, too_few, CNE_COLUMNS);    % (new, November 2026) cNEs of the condition
 
         % (new, November 2026; user's choice) fewer than MIN_UNITS good units (0 to MIN_UNITS-1): 0 active neurons and 0 Hz; every other metric
         % stays blank (NaN), in the network bursting tables too (one row per condition). Recordings analyzed before this rule with a few units
@@ -259,8 +281,12 @@ for i=1:n_recordings                                                        % ac
 
         clear SpikeFeature BurstFeature_Population TonicFeature_Population Compile_NetBurstResult
     end
+    cNEsVsBaseline = vertcat(cNEsVsBaseline, cne_comparisons(cNEResults, PerCondition, find(analyzed)', Recording{i}, ttx, too_few, ...
+        CNE_COMPARE_COLUMNS));                                              % (new, November 2026) each condition against the baseline
+    cNEsVsPrevious = vertcat(cNEsVsPrevious, cne_previous(cNEResults, PerCondition, find(analyzed)', Recording{i}, ttx, too_few, ...
+        CNE_COMPARE_COLUMNS));                                              % (new, November 2026) ... and against the condition before
     
-    clear n_conditions PerCondition n_cluster_Kilosort n_cluster_3Brain
+    clear n_conditions PerCondition n_cluster_Kilosort n_cluster_3Brain cNEResults
 end
 
 Firing = table(Organoid,ttx_qc,File,Condition,dose,T_start,T_end,Number_Good_Clusters,Number_Kilosort,Number_3Brain,Firing_Rate,CV_ISI,FFisi_CV2,FFisi_VarMean,FFcount_Spikes,MeanCount_Spikes,Entropy,LVR,mutualInfo,sttc); % build a table with the population metrics for spiking activity (general)
@@ -270,6 +296,17 @@ Bursting = table(Organoid,File, ttx_qc, Condition, dose, NumberNorm_Bursting_Neu
                 Duration_Burst, DurationCV_Burst, Amplitude_Burst, AmplitudeCV_Burst, CV_ISI_Burst, FFisi_CV2_Burst, FFisi_VarMean_Burst ... ...
                 ,NumberNorm_Spikes_nonBurst, Rate_Spiking_nonBurst, RateCV_Spiking_nonBurst, CV_ISI_nonBurst, FFisi_CV2_nonBurst, FFisi_VarMean_nonBurst, NumberNorm_Tonic_Neurons, Rate_Spiking_Tonic, RateCV_Spiking_Tonic, CV_ISI_Tonic, FFisi_CV2_Tonic, FFisi_VarMean_Tonic);
 Bursting = Bursting(1:idx,:);                                               % (only the analyzed conditions)
+
+% (new, November 2026) cNEs: the short list of measures (CNE_COLUMNS), and a note when they are blank
+cNEs = [table(Organoid, File, ttx_qc, Condition, dose), array2table(cne_values, 'VariableNames', CNE_COLUMNS), table(cne_note, 'VariableNames', {'Note'})];
+cNEs = cNEs(1:idx,:);                                                       % (only the analyzed conditions)
+cNEs = cNEs(~contains(string(cNEs.Condition), "TTX", 'IgnoreCase', true), :);   % (user's choice) the TTX conditions are left out of the cNEs
+if isempty(cNEsVsBaseline)
+    cNEsVsBaseline = cne_comparisons([], [], [], '', 0, false, CNE_COMPARE_COLUMNS);
+end
+if isempty(cNEsVsPrevious)
+    cNEsVsPrevious = cne_previous([], [], [], '', 0, false, CNE_COMPARE_COLUMNS);
+end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Compile the results on network bursting 
@@ -408,7 +445,7 @@ end
 %% Save the compiled results 
 
 file_output = fullfile(folderPath, sprintf('%s_Compiled.mat', group));
-save(file_output, 'Firing','Bursting','NETbursting0', 'NETbursting1','NETbursting2');
+save(file_output, 'Firing','Bursting','NETbursting0', 'NETbursting1','NETbursting2', 'cNEs', 'cNEsVsBaseline', 'cNEsVsPrevious');     % (revised November 2026: the cNE tables)
 
 file_output_excel = fullfile(folderPath, sprintf('%s_Compiled.xlsx', group));
 
@@ -434,6 +471,14 @@ writecell(units_netbursting,file_output_excel,'Sheet','Network Bursting Primary'
 
 writetable(NETbursting2, file_output_excel,'Sheet','Network Bursting ALL clusters','Range','A2')
 writecell(units_netbursting,file_output_excel,'Sheet','Network Bursting ALL clusters','Range','A1')
+
+% (new, November 2026) the cNE sheets, with the unit of each column in the first row
+writetable(cNEs, file_output_excel,'Sheet','cNEs','Range','A2')
+writecell([{'','','','',''}, cellfun(@cne_unit, CNE_COLUMNS, 'UniformOutput', false), {''}], file_output_excel,'Sheet','cNEs','Range','A1')
+writetable(cNEsVsBaseline, file_output_excel,'Sheet','cNEs vs baseline','Range','A2')
+writecell([{'','','','','',''}, cellfun(@cne_unit, CNE_COMPARE_COLUMNS, 'UniformOutput', false), {''}], file_output_excel,'Sheet','cNEs vs baseline','Range','A1')
+writetable(cNEsVsPrevious, file_output_excel,'Sheet','cNEs vs previous','Range','A2')
+writecell([{'','','','','',''}, cellfun(@cne_unit, CNE_COMPARE_COLUMNS, 'UniformOutput', false), {''}], file_output_excel,'Sheet','cNEs vs previous','Range','A1')
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Group the files per condition and Save the results 
@@ -521,4 +566,174 @@ end
 
 end
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Local functions (new, November 2026): the cNE sheets
 
+function [values, note] = cne_condition(R, k, too_few, columns)
+% measures (columns of the summary of "cNEAnalysis") of the cNEs of the condition k, and a note when they are blank
+values = nan(1, numel(columns));
+if too_few
+    note = 'too few units';
+    return
+elseif isempty(R) || k > numel(R.condition)
+    note = 'cNEs not computed';
+    return
+elseif R.condition(k).status ~= "ok"
+    note = char(R.condition(k).status);
+    return
+end
+s = R.condition(k).report.summary;
+values = summary_values(s, columns);
+note = '';
+if s.nCNE == 0
+    note = 'no cNEs';
+elseif s.noBursting
+    note = 'no network bursting: only the cNEs, their rates and member participation';
+elseif s.notDescribed
+    note = 'cNEs active in less than half of the network bursts: roles and order not described';
+end
+end
+
+function T = cne_comparisons(R, P, conds, recording, ttx, too_few, columns)
+% one row per comparison of the recording: the 2nd half of the baseline against its 1st half, then each other analyzed condition against
+% the baseline (columns of the summary of "cNECompare", and a note when they are blank); the TTX conditions are left out
+names = [{'Organoid', 'File', 'ttx_qc', 'Condition', 'dose', 'Reference'}, columns, {'Note'}];
+types = [{'cell', 'cell', 'double', 'cell', 'cell', 'cell'}, repmat({'double'}, 1, numel(columns)), {'cell'}];
+T = table('Size', [0 numel(names)], 'VariableTypes', types, 'VariableNames', names);
+if isempty(conds)
+    return
+end
+conds = conds(~ttx_conditions(P, conds));
+if ~isempty(R)
+    base = R.baseline;
+else
+    base = conds(find(string({P(conds).condition}) == "Baseline", 1));
+end
+if isempty(base) || ~ismember(base, conds)
+    rows = [];
+else
+    rows = [0, setdiff(conds, base, 'stable')];                             % 0: the baseline halves
+end
+C = cell(numel(rows), numel(names));
+for q = 1:numel(rows)
+    r = rows(q);
+    if r == 0
+        id = {recording, char(string(P(base).file)), ttx, 'Baseline 2nd half', '', 'Baseline 1st half'};
+    else
+        id = {recording, char(string(P(r).file)), ttx, char(string(P(r).condition)), char(string(P(r).dose)), 'Baseline'};
+    end
+    values = nan(1, numel(columns));
+    if too_few
+        note = 'too few units';
+    elseif isempty(R)
+        note = 'cNEs not computed';
+    else
+        if r == 0
+            K = R.halves;
+        elseif r <= numel(R.comparison)
+            K = R.comparison(r);
+        else
+            K = struct('status', "not compared");
+        end
+        if K.status ~= "ok"
+            note = char(K.status);
+        else
+            values = summary_values(K.result.summary, columns);
+            note = cne_compare_note(K.result.summary);
+        end
+    end
+    C(q,:) = [id, num2cell(values), {note}];
+end
+if ~isempty(C)
+    T = cell2table(C, 'VariableNames', names);
+end
+end
+
+function T = cne_previous(R, P, conds, recording, ttx, too_few, columns)
+% one row per analyzed condition compared with the condition recorded just before it (when that one is not the baseline; see
+% "previousCondition"): columns of the summary of "cNECompare", and a note when they are blank. Reference: the condition before. The TTX
+% conditions are left out
+names = [{'Organoid', 'File', 'ttx_qc', 'Condition', 'dose', 'Reference'}, columns, {'Note'}];
+types = [{'cell', 'cell', 'double', 'cell', 'cell', 'cell'}, repmat({'double'}, 1, numel(columns)), {'cell'}];
+T = table('Size', [0 numel(names)], 'VariableTypes', types, 'VariableNames', names);
+if isempty(conds)
+    return
+end
+if ~isempty(R)
+    base = R.baseline;
+else
+    base = conds(find(string({P(conds).condition}) == "Baseline", 1));
+    if isempty(base)
+        base = 0;
+    end
+end
+prev = previousCondition({P.window}, base, ttx_conditions(P, 1:numel(P)));
+rows = conds(prev(conds) > 0);
+C = cell(numel(rows), numel(names));
+for q = 1:numel(rows)
+    c = rows(q);   p = prev(c);
+    id = {recording, char(string(P(c).file)), ttx, char(string(P(c).condition)), char(string(P(c).dose)), ...
+        char(string(P(p).condition) + string(P(p).dose))};
+    values = nan(1, numel(columns));
+    if too_few
+        note = 'too few units';
+    elseif isempty(R) || ~isfield(R, 'previous') || c > numel(R.previous)
+        note = 'cNEs not computed';
+    elseif R.previous(c).reference ~= p
+        note = 'cNEs not computed for this pair';
+    elseif R.previous(c).status ~= "ok"
+        note = char(R.previous(c).status);
+    else
+        values = summary_values(R.previous(c).result.summary, columns);
+        note = cne_compare_note(R.previous(c).result.summary);
+    end
+    C(q,:) = [id, num2cell(values), {note}];
+end
+if ~isempty(C)
+    T = cell2table(C, 'VariableNames', names);
+end
+end
+
+function note = cne_compare_note(s)
+% note of a comparison whose reference condition has no cNEs (nothing to follow or to find again)
+note = '';
+if s.nCNE == 0
+    note = 'no cNEs in the reference condition';
+end
+end
+
+function t = ttx_conditions(P, conds)
+% true for the conditions (indices conds) whose label has "TTX"
+t = false(1, numel(conds));
+for q=1:numel(conds)
+    t(q) = ~isempty(P(conds(q)).condition) && contains(strjoin(string(P(conds(q)).condition), ""), "TTX", 'IgnoreCase', true);
+end
+end
+
+function values = summary_values(s, columns)
+% values of the fields "columns" of a summary (NaN when a field does not exist)
+values = nan(1, numel(columns));
+for j=1:numel(columns)
+    if isfield(s, columns{j}) && isscalar(s.(columns{j}))
+        values(j) = double(s.(columns{j}));
+    end
+end
+end
+
+function u = cne_unit(name)
+% unit of a column of the cNE sheets (written in the first row)
+name = string(name);
+if ~isempty(regexp(name, '^n[A-Z]', 'once')) || name == "medianMembers" || startsWith(name, "roles")
+    u = '#';
+elseif contains(name, "Fraction") || contains(name, "Ratio")
+    u = 'ad';
+elseif contains(name, ["Share", "share", "With", "Recruited", "Cover", "unitsInCNE"])
+    u = '%';
+elseif endsWith(name, "Rate")
+    u = '1/min';
+elseif contains(name, ["Lag", "Jitter", "Span", "Lead"])
+    u = 'sec';
+else
+    u = 'ad';
+end
+end

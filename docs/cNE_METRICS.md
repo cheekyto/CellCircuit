@@ -6,13 +6,13 @@ This page lists every measure the three cNE functions compute (`cNEDetection`, `
 - The other measures are still computed and kept in each recording's full results. They are left out of the compiled table only to keep it readable.
 - Exact definitions are in [FUNCTION_REFERENCE.md](FUNCTION_REFERENCE.md) and in the headers of the functions.
 
-**Status (November 2026): proposal.** The pipeline (`Analyze_spikeTrain`) does not run the cNE functions yet, and the compiled table has no cNE sheets yet.
+**In the pipeline since November 2026.** `Analyze_spikeTrain` runs the cNE functions (through `Analyze_cNE`; `CNE_ANALYSIS` = 1, on by default) and saves every measure in `cNEResults` of each `XXX_Analyzed.mat` file. `Compile_MEAproject` writes the short list below in the sheets "cNEs" and "cNEs vs baseline". To change the short list, edit `CNE_COLUMNS` and `CNE_COMPARE_COLUMNS` in `Compile_MEAproject` (any field of the summaries listed below can be added).
 
 ---
 
 ## At a glance: the final compiled table
 
-There are two new sheets. Each starts with the same columns as the other sheets: Organoid, File, ttx_qc, Condition and dose.
+There are three new sheets. Each starts with the same columns as the other sheets: Organoid, File, ttx_qc, Condition and dose. The TTX conditions are left out of every cNE analysis and of these sheets (user's choice, November 2026); they stay in the other sheets.
 
 ### Sheet "cNEs": one row per condition, each with its own cNEs (22 columns and a note)
 
@@ -27,7 +27,11 @@ There are two new sheets. Each starts with the same columns as the other sheets:
 
 ### Sheet "cNEs vs baseline": one row per drug condition (12 columns)
 
-This sheet also has one no-drug row per recording, comparing the 2nd half of the baseline with the 1st half. It shows the change that time alone brings, as a yardstick for the drugs.
+This sheet also has one no-drug row per recording, comparing the 2nd half of the baseline with the 1st half. It shows the change that time alone brings, as a yardstick for the drugs. The column Reference names the condition compared with (here, the baseline).
+
+### Sheet "cNEs vs previous": one row per drug condition recorded after another drug (12 columns)
+
+Each drug is also compared with the condition recorded just before it, when that condition is not the baseline. For example, with a baseline and three drugs: drug 2 against drug 1, and drug 3 against drug 2 (drug 1 has only its row against the baseline). "Just before" follows the start times of the analysis windows (`previousCondition`). Same columns as "cNEs vs baseline"; the column Reference names the condition before, and the ratios are condition / condition before.
 
 | Group | Columns |
 |---|---|
@@ -51,7 +55,7 @@ When a measure is a median, it is taken over the ensembles of the condition.
 | activationRate | how often the ensembles fire together: median of their activations per minute | per min | ✓ |
 | excessRate | activation rate minus the rate expected by chance (median) | per min | |
 | nAtChance | ensembles whose activations are mostly what chance gives (quality flag: chance gives at least 50% of their activations) | # | ✓ |
-| memberParticipation | share of the members that fire when the ensemble is active (median). It falls with ensemble size, so it is best for following one ensemble across conditions | % | ✓ |
+| memberParticipation | share of the members that fire when the ensemble is active (median). It falls with ensemble size, so it is best for following one ensemble across conditions | 0–1 | ✓ |
 | nLarge, nSmall, nSecondary, nSmallLeftOut | number of events of each type (small events that overlap a burst are left out) | # | |
 | largeWithCNE | share of the network bursts with at least one active ensemble | % | ✓ |
 | timeOnset … timeQuiet | share of the recording in each of the 6 periods: onset (0.5 s before a burst), core, secondary, tail, small, quiet | % | |
@@ -84,9 +88,9 @@ When a measure is a median, it is taken over the ensembles of the condition.
 
 ---
 
-## 2. Drug vs baseline (`cNECompare`, `comparison.summary`)
+## 2. Drug vs baseline, and drug vs the condition before (`cNECompare`, `comparison.summary`)
 
-"Baseline ensembles followed" means the ensembles detected in the baseline, followed under the drug with the same members. Ratios are drug / baseline; medians are over the baseline ensembles.
+The same measures for both comparisons; for the comparison with the condition before, read "baseline" as "the condition before". "Baseline ensembles followed" means the ensembles detected in the baseline, followed under the drug with the same members. Ratios are drug / baseline; medians are over the baseline ensembles.
 
 | Metric | What it tells you | Unit | Final |
 |---|---|---|---|
@@ -101,7 +105,7 @@ When a measure is a median, it is taken over the ensembles of the condition.
 | rateRatio | activation rate, drug / baseline (median) | ratio | ✓ |
 | excessRatio, nAtChance | rateRatio after removing what chance gives; baseline ensembles at chance (left out of excessRatio) | ratio, # | |
 | memberRateRatio | firing rate of the members, drug / baseline (median). If the activations fall more than this, the members fire less *together*, not only less | ratio | ✓ |
-| participationChange | change of the member participation, drug − baseline (median) | points | |
+| participationChange | change of the member participation, drug − baseline (median) | 0–1 | |
 | largeCoverChange | change of the share of the bursts with the ensemble active, drug − baseline (median) | points | |
 | rolesKept, rolesLost, rolesGained | number of roles (ensemble and role) kept, lost and gained under the drug | # | ✓ |
 | referenceAgreement | do the drug bursts follow the baseline order? (0.5 = chance, 1 = the same order) | 0–1 | ✓ |
@@ -133,3 +137,4 @@ When a measure is a median, it is taken over the ensembles of the condition.
   - smallRecruited and secondaryRecruited count only the events that recruit an ensemble. They are blank when no event does (smallWithCNE or secondaryWithCNE is then 0%).
 - **referenceAgreement**: needs the order measures in the baseline, and at least 3 drug bursts with 2 active ensembles.
 - **Fewer than 5 good units** (MIN_UNITS of the compilation): every cNE column is blank.
+- **The Note column** of the three sheets says why a row is blank: "too few units"; "cNEs not computed" (the recording was analyzed with `CNE_ANALYSIS` = 0, or before November 2026); "no cNEs" (none detected); "no network bursting"; "cNEs active in less than half of the network bursts" (notDescribed); "no cNEs in the reference condition", "no baseline cNEs (...)", "no cNEs for the condition (...)" or "no cNEs for the previous condition (...)" (comparisons); "error: ..." (a step that failed).
