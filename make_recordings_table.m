@@ -4,6 +4,11 @@ function T = make_recordings_table(main_folder, output_file, varargin)
 % in all its subfolders (at any depth), with the columns
 %   folder:     path of the folder of the recording
 %   file_name:  name of the recording, taken from the name of its file "<name>_QCmanual.mat" (the file name without "_QCmanual.mat")
+%   picture:    (November 2026) photo of the chip found in the folder of the recording ("recording_picture"; empty when there is none, or
+%               several: the folders with several photos are listed, to choose one by hand)
+%   picture_organoid:   empty, to be filled by hand with the number of the organoid in the photo (needed to run "SelectElectrodes")
+% The datasets written by "SelectElectrodes" ("<name>_<organoid_label>_QCmanual.mat", and the later files of the cropped dataset) are not
+% recordings of their own and are left out ("cropped_datasets"): the cropping is run, or run again, from the row of the recording
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%   INPUTS   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -17,8 +22,7 @@ function T = make_recordings_table(main_folder, output_file, varargin)
 %                           ("IntegrateDataSets") and "<name>_integrated_QCmanual.mat", also give "<name>", the common name of the files of the
 %                           recording that "run_pipeline" expects in the column file_name (one row per recording, even with several of
 %                           these files in its folder); =false: the name is the file name without the suffix, as it is
-%       'group'             (optional) value of a third column "group" for all the rows ("run_pipeline" needs a group for each recording);
-%                           without it, the table has only the two columns above
+%       'group'             (optional) value of a column "group" for all the rows ("run_pipeline" needs a group for each recording)
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%   OUTPUT   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -69,8 +73,21 @@ for k = 1:numel(files)
 end
 T = table(folder, file_name);
 T = unique(T, 'rows');                                                      % one row per recording, sorted by folder and name
+cropped = cropped_datasets(T.folder, T.file_name);                          % (November 2026) datasets written by "SelectElectrodes": the
+n_cropped = nnz(cropped);                                                   % cropping is run (again) from the row of the recording
+T(cropped, :) = [];
 if strlength(string(opt.group)) > 0
     T.group = repmat(string(opt.group), height(T), 1);
+end
+% photo of the chip of each recording (November 2026)
+T.picture = strings(height(T), 1);
+T.picture_organoid = strings(height(T), 1);
+several = strings(0, 1);
+for k = 1:height(T)
+    [T.picture(k), candidates] = recording_picture(T.folder(k), T.file_name(k));
+    if strlength(T.picture(k)) == 0 && numel(candidates) > 1
+        several(end+1,1) = T.folder(k) + ": " + strjoin(candidates, ", "); %#ok<AGROW>
+    end
 end
 
 % folders right inside main_folder without any recording (e.g., a recording not curated yet)
@@ -86,9 +103,19 @@ end
 
 writetable(T, output_file, 'WriteMode', 'replacefile');
 fprintf('%d recordings found in %s; table written to %s\n', height(T), main_folder, output_file);
+if n_cropped > 0
+    fprintf(['%d cropped datasets (written by SelectElectrodes, "<recording>_<organoid_label>") left out: the cropping is run, or run ' ...
+        'again, from the row of their recording (one row per organoid, with its organoid_label)\n'], n_cropped);
+end
 if ~isempty(empty)
     fprintf('%d folders without a file "*%s":\n', numel(empty), suffix);
     fprintf('   %s\n', empty);
+end
+fprintf('%d of %d recordings with a photo of the chip (column picture; write the number of the organoid in picture_organoid)\n', ...
+    nnz(strlength(T.picture) > 0), height(T));
+if ~isempty(several)
+    fprintf('%d folders with several photos (write the one to use in the column picture):\n', numel(several));
+    fprintf('   %s\n', several);
 end
 
 end

@@ -35,7 +35,17 @@ function run_pipeline(recordings, varargin)
 %       to_discard          clusters discarded by "QualityControl_Manual" (e.g., "3 17 25"; the indexes are defined after eliminating
 %                           the silent clusters); empty: none
 %       organoid_label      label of the organoid, with crop_ellipse ("x0 y0 radiusx radiusy", in pixels) or crop_excel (file of the
-%                           3Brain electrode map): "SelectElectrodes" runs only for the recordings with one of them
+%                           3Brain electrode map), or picture with picture_organoid: "SelectElectrodes" runs only for the recordings
+%                           with one of them
+%       picture             (November 2026) photo of the chip (file in the folder of the recording, or full path): "SelectElectrodes"
+%                           keeps the electrodes under the organoid found in the photo ("OrganoidsFromPhoto", option 3, the default;
+%                           crop_ellipse or crop_excel, when given, are used instead). When "SelectElectrodes" is run, a recording
+%                           with a picture needs picture_organoid (the run does not start without it)
+%       picture_organoid    number of the organoid in the photo (as numbered in the figure of OrganoidsFromPhoto(picture), from the top
+%                           of the array down)
+%       picture_3D_side     (optional) side of the photo where the "3D" text of the chip is (right, top, left, bottom); empty: found
+%                           from the photo (when given, it is checked against the pattern of the chip around the array)
+%       picture_n_organoids (optional) number of organoids on the chip; empty: found from the photo
 %       file_name_3Brain    name of a 3Brain dataset to integrate with the Kilosort dataset ("IntegrateDataSets")
 %       source              "Kilosort" (default) or "3Brain" (step by step only)
 %       include             =0, skip the recording (default: 1)
@@ -143,6 +153,15 @@ recs = read_recordings(table_file, table_dir);                              % lo
 recs = select_rows(recs, opts.rows);                                        % local function
 if isempty(recs)
     error("No recording to run (check the column 'include' and the option 'rows')");
+end
+if ismember("SelectElectrodes", stages)                                     % (November 2026) a picture needs the number of the organoid
+    no_number = arrayfun(@(rec) strlength(rec.picture) > 0 && isempty(rec.picture_organoid) && isempty(rec.crop_ellipse) ...
+        && strlength(rec.crop_excel) == 0, recs);
+    if any(no_number)
+        error(['Row(s) %s of the recordings table have a picture but no picture_organoid: write the number of the organoid in the ' ...
+            'photo (to see the numbering: OrganoidsFromPhoto("%s")), or empty the column picture to keep every electrode'], ...
+            strjoin(string([recs(no_number).row]), ', '), recs(find(no_number, 1)).picture);
+    end
 end
 n_rec = numel(recs);
 project = string(opts.project);
@@ -418,8 +437,11 @@ switch stage
         inputs = struct('folder', char(rec.folder), 'file_data', char(rec.file_name), 'organoid_label', char(rec.organoid_label));
         if strlength(rec.crop_excel) > 0
             inputs.option = 1;      inputs.file_excel = char(rec.crop_excel);
-        else
+        elseif ~isempty(rec.crop_ellipse)
             inputs.option = 2;      inputs.ellipse_cropped = rec.crop_ellipse;
+        else                                                                % (November 2026) photo of the chip
+            inputs.option = 3;      inputs.file_photo = char(rec.picture);  inputs.photo_organoid = rec.picture_organoid;
+            inputs.photo_text_side = rec.picture_3D_side;   inputs.photo_n_organoids = rec.picture_n_organoids;
         end
     case "IntegrateDataSets"
         if rec.source == "3Brain"                                           % a 3Brain dataset alone
@@ -641,7 +663,7 @@ end
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 function ok = has_crop(rec)
 
-ok = ~isempty(rec.crop_ellipse) || strlength(rec.crop_excel) > 0;
+ok = ~isempty(rec.crop_ellipse) || strlength(rec.crop_excel) > 0 || (strlength(rec.picture) > 0 && ~isempty(rec.picture_organoid));
 
 end
 
@@ -670,7 +692,8 @@ if ~isempty(missing_col)
 end
 
 recs = struct('row', {}, 'folder', {}, 'file_name', {}, 'group', {}, 'to_discard', {}, 'organoid_label', {}, 'crop_ellipse', {}, ...
-    'crop_excel', {}, 'file_name_3Brain', {}, 'source', {}, 'include', {});
+    'crop_excel', {}, 'picture', {}, 'picture_organoid', {}, 'picture_3D_side', {}, 'picture_n_organoids', {}, 'file_name_3Brain', {}, ...
+    'source', {}, 'include', {});
 for r=1:height(T)
     if ismember(lower(cell_text(T, r, "include")), ["0", "no", "false"])
         continue                                                            % a row that is not included (not checked; see above)
@@ -694,6 +717,27 @@ for r=1:height(T)
     rec.crop_excel = cell_text(T, r, "crop_excel");
     if ~isempty(rec.crop_ellipse) && numel(rec.crop_ellipse) ~= 4
         error("Row %d of the recordings table: crop_ellipse must have 4 numbers (x0 y0 radiusx radiusy)", r);
+    end
+    rec.picture = cell_text(T, r, "picture");                               % (November 2026) photo of the chip
+    if strlength(rec.picture) > 0 && ~is_absolute(char(rec.picture))
+        rec.picture = string(fullfile(rec.folder, rec.picture));            % (a file in the folder of the recording)
+    end
+    rec.picture_organoid = numbers(cell_text(T, r, "picture_organoid"));
+    if ~isempty(rec.picture_organoid) && (~isscalar(rec.picture_organoid) || rec.picture_organoid < 1 || rec.picture_organoid ~= round(rec.picture_organoid))
+        error("Row %d of the recordings table: picture_organoid must be one number (the organoid in the photo: 1, 2...)", r);
+    end
+    rec.picture_3D_side = lower(cell_text(T, r, "picture_3D_side"));
+    if ~ismember(rec.picture_3D_side, ["", "right", "top", "left", "bottom"])
+        error("Row %d of the recordings table: picture_3D_side must be right, top, left or bottom (or empty: found from the photo)", r);
+    end
+    rec.picture_n_organoids = numbers(cell_text(T, r, "picture_n_organoids"));
+    if isempty(rec.picture_n_organoids)
+        rec.picture_n_organoids = 0;                                        % (found from the photo)
+    elseif ~isscalar(rec.picture_n_organoids) || rec.picture_n_organoids < 1 || rec.picture_n_organoids ~= round(rec.picture_n_organoids)
+        error("Row %d of the recordings table: picture_n_organoids must be one number (or empty: found from the photo)", r);
+    end
+    if strlength(rec.picture) > 0 && ~isempty(rec.picture_organoid) && ~isfile(rec.picture)
+        error("Row %d of the recordings table: the picture %s does not exist", r, rec.picture);
     end
     if has_crop(rec) && strlength(rec.organoid_label) == 0
         error("Row %d of the recordings table: the cropping needs an organoid_label", r);

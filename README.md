@@ -36,7 +36,7 @@ flowchart LR
 | `QualityControl_General` | Discards units with refractory violations, no activity, noise or no response to TTX | `<name>_cleaned.mat` |
 | `QualityControl_HyperSynch` | Finds pairs of units with artifactual synchrony (shuffle test) | `<name>_QC.mat` |
 | `QualityControl_Manual` | Final curation (a list of units to discard, or interactive plots) | `<name>_QCmanual.mat` |
-| `SelectElectrodes` | Keeps the electrodes under the organoid (optional) | `<name>_<organoid>_QCmanual.mat` |
+| `SelectElectrodes` | Keeps the electrodes under the organoid, found in the photo of the chip (optional) | `<name>_<organoid>_QCmanual.mat`, `<name>_<organoid>_crop_map.png`, `<name>_<organoid>_crop_photo.png` |
 | `IntegrateDataSets` | Combines Kilosort and 3Brain units, removing duplicates | `<name>_curated_QCmanual.mat` |
 | `Analyze_spikeTrain` | Spiking, bursting, network-burst and ensemble (cNE) analysis of every condition | `<name>_curated_Analyzed.mat` |
 | `Compile_MEAproject` | Group tables: firing, bursting, network bursting, ensembles | `<group>_Compiled.xlsx` |
@@ -89,6 +89,8 @@ Every change that alters a result was reviewed on its own, with its measured eff
 - [npy-matlab](https://github.com/kwikteam/npy-matlab), to read the Kilosort output.
 
 **1. List the recordings** in a table (see [`recordings_template.csv`](recordings_template.csv)): one row per recording, with its folder, the common name of its files and its group. Optional columns hold the units to discard, the cropping of the electrodes, a 3Brain dataset to integrate, and whether to include the recording (a row with `include` = 0 is skipped and needs no group, so a long list can hold every recording and run only a few).
+
+*Cropping from the photo of the chip.* When the table is built from a folder (`make_recordings_table`, or the window `CellCircuit`), the photo of the chip found in the folder of each recording goes to the column `picture`. To keep only the electrodes under one organoid, write its `organoid_label` and its number in the photo in `picture_organoid` (the window button *Organoids in the picture...*, or `OrganoidsFromPhoto("photo.jpg")`, shows the organoids with their numbers); a run with `SelectElectrodes` does not start while a recording with a picture has no `picture_organoid`. The side of the photo where the "3D" text of the chip is (`picture_3D_side`) and the number of organoids (`picture_n_organoids`) are optional: they are found from the photo (a side given is checked against the landmarks of the board), and are written only when the result is wrong. `crop_ellipse` (or `crop_excel`), when given, is used instead of the photo. A chip with several organoids takes one row per organoid (same `folder` and `file_name`, its own `organoid_label` and `picture_organoid`). The datasets written by `SelectElectrodes` (`<file_name>_<organoid_label>_...`) are not listed as recordings: to crop again (e.g., another `picture_n_organoids`, `picture_3D_side` or `CROPPING_SAFETY`), run again from `SelectElectrodes` with the row of the recording (`'from', "SelectElectrodes"`), which writes the cropped dataset again from the uncropped one.
 
 **2. Run the pipeline:**
 

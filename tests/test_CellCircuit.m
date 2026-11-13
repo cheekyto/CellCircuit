@@ -146,15 +146,17 @@ assert(~isvalid(fig2), "the window opened without output could not be closed");
 % for the Excel results, saved next to it), instead of the current folder of MATLAB
 project = fullfile(folder, 'project');   mkdir(fullfile(project, 'recX'));
 x = 1;   save(fullfile(project, 'recX', 'recX_QCmanual.mat'), 'x');
+spikeTimestamp_BeforeCropping = 1;                                          % a dataset written by "SelectElectrodes" (not a recording)
+save(fullfile(project, 'recX', 'recX_org1_QCmanual.mat'), 'x', 'spikeTimestamp_BeforeCropping');
 fig3 = CellCircuit('test', true);
 closer3 = onCleanup(@() delete(fig3));
 t3 = fig3.UserData.test;
 assert(t3.start_folder() == string(pwd), "without a table and without recordings added, the current folder is not suggested");
-assert(t3.add_folder(string(project)) == 1, "the recording of the folder was not added");
+assert(t3.add_folder(string(project)) == 1, "the recording of the folder was not added, or its cropped dataset was added");
 assert(t3.start_folder() == string(project), "the folder whose recordings were added is not suggested for the table");
 t3.open_table(file);
 assert(t3.start_folder() == string(fileparts(file)), "the folder of the opened table is not suggested");
-fprintf('a table built from a folder is saved there by default\n');
+fprintf('a table built from a folder is saved there by default; the datasets written by SelectElectrodes are not listed\n');
 fprintf('test_CellCircuit: all checks passed\n');
 
 end
