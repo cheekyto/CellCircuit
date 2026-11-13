@@ -196,6 +196,7 @@ P.Analyze_spikeTrain.MIN_UNITS = 5;                             % (new, November
 P.Analyze_spikeTrain.MIN_WINDOW = 0.4;
 P.Analyze_spikeTrain.CNE_ANALYSIS = 1;                          % (new, November 2026) =1, the coordinated neuronal ensembles (cNEs) of each condition and their
                                                                 % comparison with the baseline ("Analyze_cNE"; figures with print_Plots); =0, not computed
+P.Analyze_spikeTrain.NEURON_SCORES = 1;                         % (new, November 2026) =1, the three scores of each neuron at baseline ("NeuronScores", see 7a); =0, not computed
 P.Analyze_spikeTrain.TREATMENT = {'CGP', 'Gabazine', 'DNQX', 'D-AP5', 'TTX'};          % labels of the treatments, matched to the filename of each condition
 P.Analyze_spikeTrain.RATIO_MATCH = 0.60;                        % minimum matching between the treatment labels and the filename
 
@@ -223,6 +224,24 @@ P.BurstDetection.method1.MIN_BURST_DURATION = 25;               % minimum burst 
 
 % BurstFeatures
 P.BurstFeatures.COUNT_WINDOW = 60;                              % length of the windows to count the bursts for the Fano factor of the counts, in sec (default: 60)
+
+% NeuronScores (new, November 2026): the three scores of each neuron at baseline, run by "Analyze_spikeTrain" when NEURON_SCORES = 1. The
+% axes of the scores are fixed (REFERENCE section of "NeuronScores"); the settings of "WaveformFeatures" are not listed here, because the
+% waveform axes are only valid with the settings they were computed with
+P.NeuronScores.WAVEFORM_WEIGHT = 2/3;                           % weight of the waveform in a combined distance of the scores ("weightedScores"); the firing pattern
+                                                                % gets the rest (2/3: the waveform counts twice as much); the scores themselves do not depend on it
+P.NeuronScores.LOOKALIKE_SIMILARITY = 0.95;                     % units whose template correlates more than this with the QC noise shape are not scored
+P.NeuronScores.CLEAN_SIMILARITY = 0.7;                          % units with a similarity up to this value are "clean" (to repeat the results of waveform score 2)
+P.NeuronScores.MIN_COMPOSITION_UNITS = 10;                      % minimum number of scored units for the mean scores of a recording
+
+% FiringPatternFeatures (new, November 2026): the 4 features of the firing-pattern score, outside the network bursts of the baseline. Other
+% values move the features away from those the axis of the score was computed with
+P.FiringPatternFeatures.GUARD = 0.5;                            % margin added before and after each network burst, in sec
+P.FiringPatternFeatures.MIN_SPIKES = 50;                        % minimum number of spikes outside the bursts to measure the features
+P.FiringPatternFeatures.SHORT_LAGS = [3 5];                     % lags of the autocorrelogram for the burst index, in msec (Royer et al. 2012)
+P.FiringPatternFeatures.LONG_LAGS = [200 300];                  % reference lags of the autocorrelogram, in msec (Royer et al. 2012)
+P.FiringPatternFeatures.PSEUDO_COUNT = 0.5;                     % added to the mean count per bin of each range of the autocorrelogram
+P.FiringPatternFeatures.MIN_REFERENCE = 5;                      % minimum number of reference units with spikes outside the bursts for the relative rate
 
 
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

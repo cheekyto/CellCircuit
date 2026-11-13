@@ -35,6 +35,9 @@ group = 'groupA';
 % condition against the condition recorded just before it, when that one is not the baseline (sheet "cNEs vs previous"; see
 % "previousCondition"). The TTX conditions are left out (user's choice). Only the short list of measures (CNE_COLUMNS, CNE_COMPARE_COLUMNS; see docs/cNE_METRICS.md); every measure stays in
 % "cNEResults" of each "_Analyzed.mat" file
+% (new, November 2026) 7) Neurons: one row per unit, with its three scores at baseline, the flags of "NeuronScores", the 10 core waveform
+% measures and the 4 firing-pattern features (sheet "Neuron scores"); 8) NeuronComposition: one row per recording, with the number of units
+% scored, the mean scores and the version of the axes (sheet "Neuron composition"). Everything stays in "NeuronScore" of each "_Analyzed.mat" file (see "NeuronScores")
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%   PARAMETERS   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -144,6 +147,8 @@ cne_values = nan(n_condition, numel(CNE_COLUMNS));                          % (n
 cne_note = repmat({''}, n_condition, 1);
 cNEsVsBaseline = [];                                                        % (new, November 2026) each condition against the baseline
 cNEsVsPrevious = [];                                                        % (new, November 2026) ... and against the condition before
+Neurons = neuron_units([], '');                                             % (new, November 2026) scores of each unit (sheet "Neuron scores")
+NeuronComposition = neuron_composition([], '', false);                      % (new, November 2026) ... and of each recording ("Neuron composition")
 
 idx = 0;
 for i=1:n_recordings                                                        % across all experiments
@@ -157,6 +162,14 @@ for i=1:n_recordings                                                        % ac
     n_good_clusters = info.size(2);                                         % total number of good clusters (as "size(spikeTimestamp,2)")
 
     too_few = n_good_clusters < MIN_UNITS;                                  % (new, November 2026) fewer good units than the minimum (see MIN_UNITS)
+    NeuronScore = [];                                                       % (new, November 2026) scores of the neurons, if computed (see "NeuronScores")
+    if ~isempty(whos('-file', file_input, 'NeuronScore'))
+        NeuronScore = load(file_input, 'NeuronScore').NeuronScore;
+    end
+    if ~too_few
+        Neurons = vertcat(Neurons, neuron_units(NeuronScore, Recording{i}));
+    end
+    NeuronComposition = vertcat(NeuronComposition, neuron_composition(NeuronScore, Recording{i}, too_few));
     analyzed = false(n_conditions,1);                                       % =true, if the condition k was analyzed
     for k=1:min(n_conditions, numel(PerCondition))
         analyzed(k) = ~isempty(PerCondition(k).SpikeFeature);
@@ -286,7 +299,7 @@ for i=1:n_recordings                                                        % ac
     cNEsVsPrevious = vertcat(cNEsVsPrevious, cne_previous(cNEResults, PerCondition, find(analyzed)', Recording{i}, ttx, too_few, ...
         CNE_COMPARE_COLUMNS));                                              % (new, November 2026) ... and against the condition before
     
-    clear n_conditions PerCondition n_cluster_Kilosort n_cluster_3Brain cNEResults
+    clear n_conditions PerCondition n_cluster_Kilosort n_cluster_3Brain cNEResults NeuronScore
 end
 
 Firing = table(Organoid,ttx_qc,File,Condition,dose,T_start,T_end,Number_Good_Clusters,Number_Kilosort,Number_3Brain,Firing_Rate,CV_ISI,FFisi_CV2,FFisi_VarMean,FFcount_Spikes,MeanCount_Spikes,Entropy,LVR,mutualInfo,sttc); % build a table with the population metrics for spiking activity (general)
@@ -445,7 +458,8 @@ end
 %% Save the compiled results 
 
 file_output = fullfile(folderPath, sprintf('%s_Compiled.mat', group));
-save(file_output, 'Firing','Bursting','NETbursting0', 'NETbursting1','NETbursting2', 'cNEs', 'cNEsVsBaseline', 'cNEsVsPrevious');     % (revised November 2026: the cNE tables)
+save(file_output, 'Firing','Bursting','NETbursting0', 'NETbursting1','NETbursting2', 'cNEs', 'cNEsVsBaseline', 'cNEsVsPrevious', ...
+    'Neurons', 'NeuronComposition');                                        % (revised November 2026: the cNE and neuron tables)
 
 file_output_excel = fullfile(folderPath, sprintf('%s_Compiled.xlsx', group));
 
@@ -479,6 +493,14 @@ writetable(cNEsVsBaseline, file_output_excel,'Sheet','cNEs vs baseline','Range',
 writecell([{'','','','','',''}, cellfun(@cne_unit, CNE_COMPARE_COLUMNS, 'UniformOutput', false), {''}], file_output_excel,'Sheet','cNEs vs baseline','Range','A1')
 writetable(cNEsVsPrevious, file_output_excel,'Sheet','cNEs vs previous','Range','A2')
 writecell([{'','','','','',''}, cellfun(@cne_unit, CNE_COMPARE_COLUMNS, 'UniformOutput', false), {''}], file_output_excel,'Sheet','cNEs vs previous','Range','A1')
+
+% (new, November 2026) the neuron sheets, with the unit of each column in the first row (SD = standard deviations of the reference units of
+% "NeuronScores")
+writetable(Neurons, file_output_excel,'Sheet','Neuron scores','Range','A2')
+writecell({'','','','','','','corr','SD','SD','SD','msec','msec','ad','ad','ad','1/msec','1/msec','ad','msec','1/msec^2', ...
+    'log10','ad','ad','log10','Hz','#'}, file_output_excel,'Sheet','Neuron scores','Range','A1')
+writetable(NeuronComposition, file_output_excel,'Sheet','Neuron composition','Range','A2')
+writecell({'','#','#','#','#','#','#','SD','SD','SD','corr','SD','',''}, file_output_excel,'Sheet','Neuron composition','Range','A1')
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Group the files per condition and Save the results 
@@ -736,4 +758,69 @@ elseif contains(name, ["Lag", "Jitter", "Span", "Lead"])
 else
     u = 'ad';
 end
+end
+
+function T = neuron_units(NS, recording)
+% (new, November 2026) one row per unit of the recording: its three scores, the flags of "NeuronScores", the 10 core waveform measures and the
+% 4 firing-pattern features (no rows if the scores were not computed). The flags that need the templates are blank without them
+measures = {'troughToPeak', 'halfWidth', 'peakAfterRatio', 'peakBeforeRatio', 'asymmetry', 'maxDescent', 'maxRecovery', ...
+    'descentRecoveryRatio', 'slopeTroughToPeak', 'phasePlotArea'};
+names = [{'Organoid', 'Cluster', 'NonSomatic', 'LookAlike', 'WaveformScored', 'Clean', 'NoiseSimilarity', 'WaveformScore1', ...
+    'WaveformScore2', 'FiringPatternScore'}, measures, {'RelativeRate', 'LV', 'CV', 'BurstIndex', 'RateOutside', 'SpikesOutside'}];
+types = [{'cell'}, repmat({'double'}, 1, numel(names) - 1)];
+T = table('Size', [0 numel(names)], 'VariableTypes', types, 'VariableNames', names);
+if isempty(NS)
+    return
+end
+n = numel(NS.waveformScore1);
+cluster = nan(n, 1);
+if isfield(NS, 'cluster'), cluster = double(NS.cluster(:)); end
+flags = double([NS.nonSomatic(:) NS.lookAlike(:) NS.waveformScored(:) NS.clean(:)]);
+if ~NS.templatesUsed
+    flags(:, [1 2 4]) = NaN;                                                % unknown without templates
+end
+M = nan(n, numel(measures));
+if ~isempty(NS.WaveformFeature)
+    for m=1:numel(measures)
+        M(:,m) = NS.WaveformFeature.(measures{m})(:);
+    end
+end
+FP = NS.FiringPattern;
+V = [cluster, flags, NS.noiseSimilarity(:), NS.waveformScore1(:), NS.waveformScore2(:), NS.firingPatternScore(:), M, ...
+    FP.relativeRate(:), FP.lv(:), FP.cv(:), FP.burstIndex(:), FP.rateOutside(:), FP.nSpikesOutside(:)];
+T = [table(repmat({recording}, n, 1), 'VariableNames', {'Organoid'}), array2table(V, 'VariableNames', names(2:end))];
+end
+
+function T = neuron_composition(NS, recording, too_few)
+% (new, November 2026) one row per recording: the number of units scored, the mean scores of "NeuronScores", the version of the axes used,
+% and a note when they are blank
+names = {'Organoid', 'Units', 'Somatic', 'LookAlikes', 'WaveformScored', 'FiringScored', 'Clean', 'MeanWaveformScore1', ...
+    'MeanWaveformScore2', 'MeanFiringPatternScore', 'MeanNoiseSimilarity', 'MeanWaveformScore2Clean', 'AxesVersion', 'Note'};
+types = [{'cell'}, repmat({'double'}, 1, numel(names) - 3), {'cell', 'cell'}];
+T = table('Size', [0 numel(names)], 'VariableTypes', types, 'VariableNames', names);
+if isempty(recording)
+    return
+end
+v = nan(1, numel(names) - 3);
+note = '';
+version = '';
+if too_few
+    note = 'too few units';
+elseif isempty(NS)
+    note = 'neuron scores not computed';
+else
+    c = NS.composition;
+    v = [c.nUnits c.nSomatic c.nLookAlike c.nWaveformScored c.nFiringScored c.nClean c.meanWaveformScore1 c.meanWaveformScore2 ...
+        c.meanFiringPatternScore c.meanNoiseSimilarity c.meanWaveformScore2Clean];
+    if isfield(NS.reference, 'version')
+        version = char(NS.reference.version);                               % the axes used (scores of different versions must not be mixed)
+    end
+    if ~NS.templatesUsed
+        note = 'no Kilosort templates: firing-pattern score only';
+    elseif any(isnan(v(7:end)))
+        note = sprintf('a mean needs at least %g scored units', NS.parameters.MIN_COMPOSITION_UNITS);
+    end
+end
+T = [table({recording}, 'VariableNames', {'Organoid'}), array2table(v, 'VariableNames', names(2:end-2)), ...
+    table({version}, {note}, 'VariableNames', {'AxesVersion', 'Note'})];
 end

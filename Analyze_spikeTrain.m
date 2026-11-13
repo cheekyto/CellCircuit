@@ -60,7 +60,8 @@ plot_network_burst = 1;
 
 % matlab file sprintf('%s\\%s\\%s_Analyzed.mat', main_folder, project_folder, file_data), containing the following variables
 %  1) spikeTimestamp, 2) PerCondition, 3) NetworkBurstDetected, 4) (new, November 2026) cNEResults, the coordinated neuronal ensembles of
-%  each condition and their comparison with the baseline (see "Analyze_cNE" and CNE_ANALYSIS)
+%  each condition and their comparison with the baseline (see "Analyze_cNE" and CNE_ANALYSIS), 5) (new, November 2026) NeuronScore, the three
+%  scores of each neuron at baseline: two from its spike waveform and one from its firing pattern (see "NeuronScores" and NEURON_SCORES)
 % PerCondition(cond) has the following fields (per each recording condition): 
 %   1) spikeTrain, 2) SpikeFeature, 3) BurstFeature, 4) BurstDetected, 5) BurstFeature_Population, 6) TonicFeature_Population, 7) NetworkBurstFeature, 8) NetworkBurstStructure, 9) condition, 10) window
 
@@ -78,6 +79,9 @@ MIN_WINDOW = 0.4;
 CNE_ANALYSIS = 1;                           % (new, November 2026; user's choice: on by default) =1, the coordinated neuronal ensembles (cNEs) of each
                                             % condition and their comparison with the baseline ("Analyze_cNE"; saved as "cNEResults", with figures when
                                             % print_Plots = 1); =0, not computed ("Compile_MEAproject" leaves the cNE sheets blank)
+NEURON_SCORES = 1;                          % (new, November 2026; on by default) =1, the three scores of each neuron at baseline ("NeuronScores": waveform
+                                            % from the Kilosort templates of the recording folder, firing pattern outside the network bursts; saved as
+                                            % "NeuronScore"); =0, not computed ("Compile_MEAproject" leaves the neuron sheets blank)
 
 RATIO_MATCH = 0.60;                         % minimum matching between the treatment labels and the filename
 TREATMENT{1} = 'CGP';
@@ -555,6 +559,15 @@ if CNE_ANALYSIS
         struct('plots', print_Plots == 1, 'folder', folder, 'file_data', file_data, 'hide', hide_plots));
     save(file_output, 'cNEResults', '-append');
 end
+
+% (new, November 2026) the three scores of each neuron at baseline (see "NeuronScores"): two from the Kilosort template of each unit (files
+% "metadata.csv" and "waveforms.mat" of the recording folder, see "loadKilosortTemplates"), one from its firing pattern outside the network
+% bursts of the baseline. Run after the results above are saved; without templates (e.g., 3Brain units), only the firing-pattern score;
+% a problem is reported and the rest goes on
+if NEURON_SCORES
+    NeuronScore = neuron_scores(folder, spikeTimestamp, PerCondition(base_cond));
+    save(file_output, 'NeuronScore', '-append');
+end
 toc
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Plot the results
@@ -602,9 +615,40 @@ if print_Plots && ~opt_rerun && n_clusters > 0                             % (re
     save_plot(gcf, file_output, hide_plots)
 
 end
-clear('condition_analysis0', 'spikeTimestamp','PerCondition','n_clusterOriginal','n_cluster_Kilosort','n_cluster_3Brain','rec_conditions', 'cNEResults');
+clear('condition_analysis0', 'spikeTimestamp','PerCondition','n_clusterOriginal','n_cluster_Kilosort','n_cluster_3Brain','rec_conditions', 'cNEResults', ...
+    'NeuronScore');
 end
 
+end
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+function NeuronScore = neuron_scores(folder, spikeTimestamp, Baseline)
+
+% (new, November 2026) "NeuronScores" for the baseline condition, with the Kilosort templates of the recording folder when they can be read.
+% NeuronScore also keeps the cluster id of each unit and the condition. A problem is reported, and NeuronScore = [] (the rest goes on)
+
+NeuronScore = [];
+if isempty(spikeTimestamp)
+    fprintf("\n   Neuron scores: no units \n");
+    return
+end
+try
+    templates = [];  unitType = [];  samplingRate = NaN;
+    try
+        [templates, unitType, samplingRate] = loadKilosortTemplates(folder, spikeTimestamp);
+    catch err
+        fprintf("\n   Neuron scores: the Kilosort templates cannot be read (%s): only the firing-pattern score \n", err.message);
+    end
+    NeuronScore = NeuronScores(Baseline.spikeTrain, Baseline.window, Baseline.NetworkBurstDetected, templates, samplingRate, unitType);
+    NeuronScore.cluster = double([spikeTimestamp.cluster])';
+    NeuronScore.condition = Baseline.condition;
+    c = NeuronScore.composition;
+    fprintf("\n   Neuron scores: %g units, %g with the waveform scores, %g with the firing-pattern score \n", c.nUnits, c.nWaveformScored, ...
+        c.nFiringScored);
+catch err
+    warning('Analyze_spikeTrain: the neuron scores could not be computed (%s)', err.message);
+    NeuronScore = [];
+end
 end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
