@@ -52,7 +52,7 @@ fid = fopen(version_file, 'w');   fprintf(fid, '%s\n', version_text);   fclose(f
 
 main_m = string({dir(fullfile(copy, '*.m')).name})';
 files = [fullfile(copy, main_m); version_file; fullfile(copy, ["recordings_template.csv", "README.md", "LICENSE"])'; ...
-         fullfile(copy, "docs", "FUNCTION_REFERENCE.md")];
+         fullfile(copy, "docs", "FUNCTION_REFERENCE.md"); fullfile(copy, "OrganoidsFromPhoto_chip.mat")];   % (pattern of the chip, November 2026)
 files = files(isfile(files));
 if ~any(main_m == "CellCircuit.m")
     error("The last commit has no CellCircuit.m");

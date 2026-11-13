@@ -38,7 +38,8 @@ STAGE_TEXT = ["1. Read the spike-sorted data (Kilosort)", "1b. Read 3Brain data 
               "4. Quality control: units discarded by hand (column to_discard)", "5. Keep the electrodes under the organoid (cropping columns)", ...
               "6. Combine Kilosort and 3Brain units", "7. Analyze firing, bursts and network bursts", "8. Compile the Excel tables of each group"];
 STAGE_SHORT = ["Read data", "Read 3Brain", "QC activity", "QC synchrony", "QC by hand", "Cropping", "Combine", "Analyze", "Compile"];
-COLUMNS = ["include", "folder", "file_name", "group", "to_discard", "source", "organoid_label", "crop_ellipse", "crop_excel", "file_name_3Brain"];
+COLUMNS = ["include", "folder", "file_name", "group", "to_discard", "source", "organoid_label", "picture", "picture_organoid", ...
+    "picture_3D_side", "picture_n_organoids", "crop_ellipse", "crop_excel", "file_name_3Brain"];
 COLOR_DONE = [0.80 0.94 0.80];      COLOR_RUN = [1.00 0.93 0.60];      COLOR_ERROR = [1.00 0.75 0.75];      COLOR_SKIP = [0.90 0.90 0.90];
 COLOR_CHANGED = [1.00 0.93 0.60];
 MAX_COMMON = 15;                    % (user's choice) at most this number of parameters in the list of common adjustments
@@ -87,7 +88,9 @@ g1 = uigridlayout(tab_rec, [5 1], 'RowHeight', {'fit', 'fit', 'fit', '1x', 'fit'
 uilabel(g1, 'WordWrap', 'on', 'Text', ['One row per recording, each in its own folder. Tick "include" to run it. "group": the recordings of the ' ...
     'same group are compiled together in one Excel file. "file_name": the common name of the files of the recording (for a new Kilosort ' ...
     'recording, the name you choose for its files). Optional: "to_discard", units to discard by hand (e.g., 3 17 25); "source", Kilosort or ' ...
-    '3Brain; "organoid_label" with "crop_ellipse" (x0 y0 radiusx radiusy, in pixels) or "crop_excel", to keep only the electrodes under the organoid; ' ...
+    '3Brain; "organoid_label" with "picture" (photo of the chip, found in the folder of the recording) and "picture_organoid" (number of the ' ...
+    'organoid in the photo; needed to run the cropping), to keep only the electrodes under the organoid (optional: "picture_3D_side", side ' ...
+    'of the photo where the "3D" text is, and "picture_n_organoids"; "crop_ellipse" or "crop_excel", when given, are used instead of the photo); ' ...
     '"file_name_3Brain", a 3Brain dataset to combine with the Kilosort one.']);
 b1 = uigridlayout(g1, [1 9], 'ColumnWidth', {105, 170, 105, 115, 90, 160, 60, 75, '1x'}, 'Padding', [0 0 0 0]);
 uibutton(b1, 'Text', 'Open table...', 'ButtonPushedFcn', guard(@on_open_table), 'Tooltip', 'Open a recordings table (.xlsx or .csv)');
@@ -102,14 +105,16 @@ uibutton(b1, 'Text', 'Save', 'ButtonPushedFcn', guard(@(~,~) save_table(false)))
 uibutton(b1, 'Text', 'Save as...', 'ButtonPushedFcn', guard(@(~,~) save_table(true)));
 table_label = uilabel(b1, 'Text', 'No table yet', 'FontAngle', 'italic');
 % (new, user's request) tick or untick "include" for every recording in one click, e.g., untick all and tick the few to run
-b_inc = uigridlayout(g1, [1 3], 'ColumnWidth', {80, 90, '1x'}, 'Padding', [0 0 0 0]);
+b_inc = uigridlayout(g1, [1 4], 'ColumnWidth', {80, 90, 210, '1x'}, 'Padding', [0 0 0 0]);
 tick_all_button = uibutton(b_inc, 'Text', 'Tick all', 'ButtonPushedFcn', guard(@(~,~) set_include(true)), ...
     'Tooltip', 'Tick "include" for every recording');
 untick_all_button = uibutton(b_inc, 'Text', 'Untick all', 'ButtonPushedFcn', guard(@(~,~) set_include(false)), ...
     'Tooltip', 'Untick "include" for every recording, then tick the few recordings to run');
+uibutton(b_inc, 'Text', 'Organoids in the picture...', 'ButtonPushedFcn', guard(@on_show_organoids), ...
+    'Tooltip', 'Show the organoids found in the picture of the selected row, with their numbers (for the column picture_organoid)');
 include_label = uilabel(b_inc, 'Text', '', 'FontWeight', 'bold', 'FontColor', [0 0.45 0]);
 rec_table =uitable(g1, 'Data', empty_rows(0), 'ColumnEditable', true, 'SelectionType', 'row', 'Multiselect', 'on', ...
-    'CellEditCallback', guard(@on_table_edit), 'ColumnWidth', {55, 330, 170, 90, 90, 80, 100, 110, 90, 120});
+    'CellEditCallback', guard(@on_table_edit), 'ColumnWidth', {55, 330, 170, 90, 90, 80, 100, 150, 70, 70, 70, 110, 90, 120});
 uilabel(g1, 'Text', 'Tip: you can also edit the table in Excel and open it again here. Save the table before closing; Run saves it for you.', ...
     'FontColor', [0.4 0.4 0.4]);
 
@@ -244,8 +249,14 @@ end
 
     function T = empty_rows(n)
         % rows of the recordings table, with every column of "run_pipeline" (include ticked, source Kilosort)
-        T = table(true(n,1), strings(n,1), strings(n,1), strings(n,1), strings(n,1), categorical(repmat("Kilosort", n, 1), ["Kilosort", "3Brain"]), ...
-            strings(n,1), strings(n,1), strings(n,1), strings(n,1), 'VariableNames', cellstr(COLUMNS));
+        T = table(true(n,1), 'VariableNames', {'include'});
+        for c = COLUMNS(2:end)
+            if c == "source"
+                T.source = categorical(repmat("Kilosort", n, 1), ["Kilosort", "3Brain"]);
+            else
+                T.(c) = strings(n, 1);
+            end
+        end
     end
 
     function open_table(file)
@@ -292,7 +303,7 @@ end
             T.(c) = v;
         end
         rec_table.Data = T;
-        rec_table.ColumnWidth = [{55, 330, 170, 90, 90, 80, 100, 110, 90, 120}, repmat({'auto'}, 1, width(T) - numel(COLUMNS))];
+        rec_table.ColumnWidth = [{55, 330, 170, 90, 90, 80, 100, 150, 70, 70, 70, 110, 90, 120}, repmat({'auto'}, 1, width(T) - numel(COLUMNS))];
         table_file = file;
         table_dirty = false;
         remember('last_table', file);
@@ -376,6 +387,37 @@ end
         % first one was read)
         rows = unique(rec_table.Selection(:));
         rows = rows(rows >= 1 & rows <= height(rec_table.Data));
+    end
+
+    function on_show_organoids(~, ~)
+        % (November 2026) figure of the organoids found in the picture of the selected row ("OrganoidsFromPhoto"), with their numbers
+        rows = selected_table_rows();
+        if isempty(rows)
+            message('Click the row of a recording with a picture first.', 'Organoids in the picture');
+            return
+        end
+        T = rec_table.Data;     r = rows(1);
+        pic = strtrim(T.picture(r));
+        if strlength(pic) == 0
+            message('This recording has no picture (column picture).', 'Organoids in the picture');
+            return
+        end
+        folder = strtrim(T.folder(r));
+        if isempty(regexp(char(folder), '^(/|~|[A-Za-z]:[\\/]|\\\\)', 'once')) && strlength(table_file) > 0
+            folder = string(fullfile(fileparts(table_file), folder));       % (relative to the folder of the table)
+        end
+        if isempty(regexp(char(pic), '^(/|~|[A-Za-z]:[\\/]|\\\\)', 'once'))
+            pic = string(fullfile(folder, pic));                            % (a file in the folder of the recording)
+        end
+        n = str2double(T.picture_n_organoids(r));
+        if isnan(n), n = 0; end
+        set_status(sprintf('Finding the organoids in %s...', pic));     drawnow;
+        try
+            res = OrganoidsFromPhoto(pic, struct('TEXT_SIDE', lower(strtrim(T.picture_3D_side(r))), 'N_ORGANOIDS', n));
+            set_status(sprintf('%d organoid(s) in the picture of row %d; %s', res.n_organoids, r, res.orientation.message));
+        catch ME
+            message(sprintf('The organoids could not be found in %s: %s', pic, ME.message), 'Organoids in the picture');
+        end
     end
 
     function on_group_rows(~, ~)
@@ -1572,7 +1614,8 @@ function R = find_recordings(d)
 
 % function to find the recordings in a folder and its subfolders: the folders with files of the pipeline ("<name>_raw.mat",
 % "<name>_cleaned.mat", "<name>_QCmanual.mat"; "<name>_curated_..." and "<name>_integrated_..." give "<name>"), or with Kilosort output
-% (spike_times.npy; the name of the folder is proposed). The folders of the groups (only "_Analyzed.mat" files) are not recordings
+% (spike_times.npy; the name of the folder is proposed). The folders of the groups (only "_Analyzed.mat" files) are not recordings, nor
+% the datasets written by "SelectElectrodes" (November 2026, "cropped_datasets")
 
 files = [dir(fullfile(d, '**', '*_raw.mat')); dir(fullfile(d, '**', '*_cleaned.mat')); dir(fullfile(d, '**', '*_QCmanual.mat'))];
 folder = strings(0,1);   name = strings(0,1);
@@ -1594,10 +1637,17 @@ end
 folder = folder(keep);   name = name(keep);
 [~, order] = sort(folder + "|" + name);
 folder = folder(order);   name = name(order);
+cropped = cropped_datasets(folder, name);                                   % (November 2026) datasets written by "SelectElectrodes" (the
+folder = folder(~cropped);   name = name(~cropped);                         % cropping is run again from the row of the recording)
 n = numel(folder);
+picture = strings(n,1);
+for k = 1:n
+    picture(k) = recording_picture(folder(k), name(k));                    % (November 2026) photo of the chip in the folder of the recording
+end
 R = table(true(n,1), folder, name, strings(n,1), strings(n,1), categorical(repmat("Kilosort", n, 1), ["Kilosort", "3Brain"]), ...
-    strings(n,1), strings(n,1), strings(n,1), strings(n,1), 'VariableNames', ...
-    {'include', 'folder', 'file_name', 'group', 'to_discard', 'source', 'organoid_label', 'crop_ellipse', 'crop_excel', 'file_name_3Brain'});
+    strings(n,1), picture, strings(n,1), strings(n,1), strings(n,1), strings(n,1), strings(n,1), strings(n,1), 'VariableNames', ...
+    {'include', 'folder', 'file_name', 'group', 'to_discard', 'source', 'organoid_label', 'picture', 'picture_organoid', 'picture_3D_side', ...
+    'picture_n_organoids', 'crop_ellipse', 'crop_excel', 'file_name_3Brain'});
 R.source(endsWith(R.file_name, "_3Brain")) = "3Brain";
 
 end
