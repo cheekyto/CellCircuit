@@ -20,6 +20,8 @@ function FiringPattern = FiringPatternFeatures(spikeTrain, tRange, netBursts, re
 
 %   spikeTrain:     structure array with one element per unit (as PerCondition(cond).spikeTrain of "Analyze_spikeTrain"), with the field
 %                   .timeStamp: time of each spike, in msec
+%                   (new, November 2026) or a firing pattern already measured (output of this function): only its relativeRate is computed
+%                   again, against the units of "reference" (with the MIN_REFERENCE it was measured with); tRange and netBursts are not used
 %   tRange:         [start end] of the analysis window, in sec (as PerCondition(cond).window)
 %   netBursts:      primary network bursts of the same window: the structure NetworkBurstDetected (its IndivBurst(j).start and .last,
 %                   in sec) or a matrix with one row per burst [start last], in sec; [] if there are no network bursts (the whole window
@@ -66,6 +68,26 @@ apply_parameters('FiringPatternFeatures');                                  % va
 
 FEATURES = {'relativeRate', 'lv', 'cv', 'burstIndex'};
 K_MSEC_SEC = 1/1000;                % factor to rescale from msec to sec
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% (new, November 2026) Firing pattern already measured: relative rate against other reference units
+
+if isstruct(spikeTrain) && isscalar(spikeTrain) && isfield(spikeTrain, 'rateOutside') && isfield(spikeTrain, 'enoughSpikes')
+    FiringPattern = spikeTrain;
+    n_units = numel(FiringPattern.rateOutside);
+    if nargin < 4 || isempty(reference)
+        reference = true(n_units, 1);
+    end
+    reference = logical(reference(:));
+    if numel(reference) ~= n_units
+        error("FiringPatternFeatures: 'reference' must have one value per unit (%d units, %d values)", n_units, numel(reference));
+    end
+    if isfield(FiringPattern, 'parameters') && isfield(FiringPattern.parameters, 'MIN_REFERENCE')
+        MIN_REFERENCE = FiringPattern.parameters.MIN_REFERENCE;
+    end
+    FiringPattern.relativeRate = relative_rate(FiringPattern.rateOutside(:), reference, logical(FiringPattern.enoughSpikes(:)), MIN_REFERENCE);
+    return
+end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Periods outside the network bursts
@@ -158,21 +180,13 @@ if time_outside > 0
 else
     rate_outside = nan(n_units, 1);                                         % the bursts cover the whole window
 end
-log_rate = log10(rate_outside);
-log_rate(rate_outside == 0) = NaN;
-use = reference & rate_outside > 0;
-if sum(use) >= MIN_REFERENCE
-    relative_rate = log_rate - median(log_rate(use));
-else
-    relative_rate = nan(n_units, 1);
-end
 enough = n_outside >= MIN_SPIKES;
-relative_rate(~enough) = NaN;
+rel_rate = relative_rate(rate_outside, reference, enough, MIN_REFERENCE);
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Output
 
-FiringPattern.relativeRate = relative_rate;
+FiringPattern.relativeRate = rel_rate;
 FiringPattern.lv = lv;
 FiringPattern.cv = cv;
 FiringPattern.burstIndex = burst_index;
@@ -186,4 +200,19 @@ FiringPattern.features = FEATURES;
 FiringPattern.parameters = struct('GUARD', GUARD, 'MIN_SPIKES', MIN_SPIKES, 'SHORT_LAGS', SHORT_LAGS, 'LONG_LAGS', LONG_LAGS, ...
     'PSEUDO_COUNT', PSEUDO_COUNT, 'MIN_REFERENCE', MIN_REFERENCE);
 
+end
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+function rr = relative_rate(rate_outside, reference, enough, min_reference)
+% log10 of the rate outside the bursts minus its median across the reference units with spikes outside the bursts (NaN for every unit with
+% less than min_reference of them, and for the units without enough spikes) (moved here, November 2026)
+log_rate = log10(rate_outside);
+log_rate(rate_outside == 0) = NaN;
+use = reference & rate_outside > 0;
+if sum(use) >= min_reference
+    rr = log_rate - median(log_rate(use));
+else
+    rr = nan(numel(rate_outside), 1);
+end
+rr(~enough) = NaN;
 end

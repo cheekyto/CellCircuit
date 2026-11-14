@@ -226,8 +226,8 @@ P.BurstDetection.method1.MIN_BURST_DURATION = 25;               % minimum burst 
 P.BurstFeatures.COUNT_WINDOW = 60;                              % length of the windows to count the bursts for the Fano factor of the counts, in sec (default: 60)
 
 % NeuronScores (new, November 2026): the three scores of each neuron at baseline, run by "Analyze_spikeTrain" when NEURON_SCORES = 1. The
-% axes of the scores are fixed (REFERENCE section of "NeuronScores"); the settings of "WaveformFeatures" are not listed here, because the
-% waveform axes are only valid with the settings they were computed with
+% axes of the scores are fixed (REFERENCE section of "NeuronScores"; "CompareNeurons" fits them again on the groups it compares); the
+% settings of "WaveformFeatures" are not listed here, because the waveform axes are only valid with the settings they were computed with
 P.NeuronScores.WAVEFORM_WEIGHT = 2/3;                           % weight of the waveform in a combined distance of the scores ("weightedScores"); the firing pattern
                                                                 % gets the rest (2/3: the waveform counts twice as much); the scores themselves do not depend on it
 P.NeuronScores.LOOKALIKE_SIMILARITY = 0.95;                     % units whose template correlates more than this with the QC noise shape are not scored

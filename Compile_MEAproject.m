@@ -302,6 +302,13 @@ for i=1:n_recordings                                                        % ac
     clear n_conditions PerCondition n_cluster_Kilosort n_cluster_3Brain cNEResults NeuronScore
 end
 
+% (new, November 2026) the neuron scores of the recordings of a group must use the same axes (AXES_FILE of "NeuronScores")
+axes_versions = unique(string(NeuronComposition.AxesVersion(~cellfun(@isempty, NeuronComposition.AxesVersion))));
+if numel(axes_versions) > 1
+    fprintf("\n WARNING: the neuron scores of this group use %d sets of axes ('%s'): analyze every recording with the same AXES_FILE " + ...
+        "of NeuronScores before comparing their scores (CompareNeurons fits its own axes) \n", numel(axes_versions), strjoin(axes_versions, "', '"));
+end
+
 Firing = table(Organoid,ttx_qc,File,Condition,dose,T_start,T_end,Number_Good_Clusters,Number_Kilosort,Number_3Brain,Firing_Rate,CV_ISI,FFisi_CV2,FFisi_VarMean,FFcount_Spikes,MeanCount_Spikes,Entropy,LVR,mutualInfo,sttc); % build a table with the population metrics for spiking activity (general)
 Firing = Firing(1:idx,:);                                                   % (only the analyzed conditions)
 
@@ -815,7 +822,9 @@ else
     if isfield(NS.reference, 'version')
         version = char(NS.reference.version);                               % the axes used (scores of different versions must not be mixed)
     end
-    if ~NS.templatesUsed
+    if ~NS.templatesUsed && ~isempty(NS.WaveformFeature)
+        note = 'templates unlike those of the axes: firing-pattern score only';     % (new, November 2026; see "FitNeuronAxes")
+    elseif ~NS.templatesUsed
         note = 'no Kilosort templates: firing-pattern score only';
     elseif any(isnan(v(7:end)))
         note = sprintf('a mean needs at least %g scored units', NS.parameters.MIN_COMPOSITION_UNITS);

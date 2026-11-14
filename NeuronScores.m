@@ -25,6 +25,8 @@ function NeuronScore = NeuronScores(spikeTrain, tRange, netBursts, waveforms, sa
 % organoid means: axes must not be refitted on one of the groups being compared. NeuronScore.reference.version names the axes used
 % The waveform axes only apply to templates like those of the reference (Kilosort 2.5 export: REF_SAMPLES samples after the padding, at
 % about REF_SAMPLING_RATE Hz); for other templates (or without templates, e.g., 3Brain units) the waveform scores are NaN
+% (new, November 2026) Other axes: "CompareNeurons" fits the axes again on all the groups of a comparison ("FitNeuronAxes", in the same
+% way) and places the units on them through AXES_FILE (a file of axes; "" = the fixed axes below)
 % Units scored: the waveform scores for the somatic units (not "nonSomatic" in "WaveformFeatures") that are not look-alikes
 % (noiseSimilarity > LOOKALIKE_SIMILARITY; user's choice: they are kept in the network burst analysis, but their template says nothing
 % about the cell type) and have the 10 measures; the firing-pattern score for these units when they have the 4 features (at least MIN_SPIKES
@@ -71,10 +73,12 @@ function NeuronScore = NeuronScores(spikeTrain, tRange, netBursts, waveforms, sa
 %                                      meanWaveformScore1, meanWaveformScore2, meanFiringPatternScore, meanNoiseSimilarity (of the scored
 %                                      units), meanWaveformScore2Clean (of the scored units with clean = true)
 % Details:
-% NeuronScore.WaveformFeature          output of "WaveformFeatures" ([] without templates)
+% NeuronScore.WaveformFeature          output of "WaveformFeatures" ([] without templates; revised November 2026: kept also when the
+%                                      templates are not like the reference ones, to fit axes for them with "FitNeuronAxes")
 % NeuronScore.FiringPattern            output of "FiringPatternFeatures"
 % NeuronScore.scores                   names of the three scores, in the order of the columns of weightedScores
-% NeuronScore.reference                the reference axes used (section REFERENCE), with their version (.version)
+% NeuronScore.reference                the reference axes used (section REFERENCE, or the file AXES_FILE), with their version (.version)
+%                                      and their file (.file, "" for the axes of section REFERENCE)
 % NeuronScore.parameters               parameters used
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -86,6 +90,7 @@ LOOKALIKE_SIMILARITY = 0.95;        % (user's choice) units whose template corre
 CLEAN_SIMILARITY = 0.7;             % (user's choice) units with a similarity up to this value are "clean": waveformScore2 barely depends on the
                                     % similarity among them (within-organoid rho -0.15, against -0.74 for all units)
 MIN_COMPOSITION_UNITS = 10;         % minimum number of scored units for the means of "composition"
+AXES_FILE = "";                     % (new, November 2026) file of axes written by "FitNeuronAxes" (.mat); "" = the axes of section REFERENCE
 apply_parameters('NeuronScores');                                           % values of the parameter set of "run_pipeline", if any (see "pipeline_parameters")
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -97,7 +102,7 @@ apply_parameters('NeuronScores');                                           % va
 % (WF_TRANSFORM, FP_TRANSFORM), standardized with the weighted mean and SD of the reference units, and projected on the principal axes of
 % their weighted correlation matrix (scaled so that the scores of the reference units have weighted mean 0 and SD 1). With every unit
 % counting once instead, the axes agree with |cosine| >= 0.99. They are not parameters: changing them would make the scores of different
-% recordings incomparable. A new set of axes must get a new REFERENCE_VERSION
+% recordings incomparable. A new set of axes must get a new REFERENCE_VERSION (with "FitNeuronAxes", in a file given by AXES_FILE)
 REFERENCE_VERSION = "2026-11-13, 58 organoids, equal weight per organoid";
 WF_MEASURES = {'troughToPeak', 'halfWidth', 'peakAfterRatio', 'peakBeforeRatio', 'asymmetry', 'maxDescent', 'maxRecovery', ...
                'descentRecoveryRatio', 'slopeTroughToPeak', 'phasePlotArea'};       % the 10 core measures of "WaveformFeatures"
@@ -124,6 +129,17 @@ REF_SAMPLES = numel(NOISE_SHAPE);   % samples of the reference templates after r
 REF_SAMPLING_RATE = 19753.8;        % sampling rate of the reference recordings, in Hz (templates within 1% of it are accepted)
 
 SCORES = {'waveformScore1', 'waveformScore2', 'firingPatternScore'};
+
+% (new, November 2026) axes of a file written by "FitNeuronAxes", instead of the ones above
+AXES_FILE = string(AXES_FILE);
+if strlength(AXES_FILE) > 0
+    A = read_axes(AXES_FILE, WF_MEASURES, WF_TRANSFORM, FP_FEATURES, FP_TRANSFORM);
+    REFERENCE_VERSION = A.version;
+    WF_MEAN = A.WF_MEAN;  WF_SD = A.WF_SD;  WF_AXES = A.WF_AXES;  WF_EIGENVALUES = A.WF_EIGENVALUES;
+    FP_MEAN = A.FP_MEAN;  FP_SD = A.FP_SD;  FP_AXIS = A.FP_AXIS;
+    NOISE_SHAPE = A.NOISE_SHAPE;    % ([] if the templates of the file are not like the reference ones: no look-alikes, no "clean" units)
+    REF_SAMPLES = A.REF_SAMPLES;  REF_SAMPLING_RATE = A.REF_SAMPLING_RATE;
+end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Waveform: measures, similarity to the QC noise shape, scores
@@ -163,9 +179,11 @@ similarity = nan(n_units, 1);
 non_somatic = false(n_units, 1);
 wf_scores = nan(n_units, 2);
 if templates_used
-    X = W.waveform - mean(W.waveform, 2);                                   % Pearson correlation with the QC noise shape
-    r0 = NOISE_SHAPE - mean(NOISE_SHAPE);
-    similarity = (X * r0') ./ (sqrt(sum(X.^2, 2)) * norm(r0));
+    if ~isempty(NOISE_SHAPE)
+        X = W.waveform - mean(W.waveform, 2);                               % Pearson correlation with the QC noise shape
+        r0 = NOISE_SHAPE - mean(NOISE_SHAPE);
+        similarity = (X * r0') ./ (sqrt(sum(X.^2, 2)) * norm(r0));
+    end
     non_somatic = logical(W.nonSomatic(:));
     M = nan(n_units, numel(WF_MEASURES));
     for m=1:numel(WF_MEASURES)
@@ -188,6 +206,9 @@ else
 end
 if isstruct(spikeTrain) && isfield(spikeTrain, 'lv') && isfield(spikeTrain, 'relativeRate')
     FP = spikeTrain;
+    if isfield(FP, 'rateOutside') && isfield(FP, 'enoughSpikes')
+        FP = FiringPatternFeatures(FP, [], [], reference);                  % (new, November 2026) relative rate against these reference units
+    end                                                                     % (the same values if it was measured against them)
 else
     FP = FiringPatternFeatures(spikeTrain, tRange, netBursts, reference);
 end
@@ -233,18 +254,15 @@ C.meanNoiseSimilarity = mean_if(similarity(waveform_scored), MIN_COMPOSITION_UNI
 C.meanWaveformScore2Clean = mean_if(wf_scores(waveform_scored & clean, 2), MIN_COMPOSITION_UNITS);
 NeuronScore.composition = C;
 
-if templates_used
-    NeuronScore.WaveformFeature = W;
-else
-    NeuronScore.WaveformFeature = [];
-end
+NeuronScore.WaveformFeature = W;                                            % (revised November 2026) also when the templates are not like the
+                                                                            % reference ones (for "FitNeuronAxes"); [] without templates
 NeuronScore.FiringPattern = FP;
 NeuronScore.scores = SCORES;
-NeuronScore.reference = struct('version', REFERENCE_VERSION, 'WF_MEASURES', {WF_MEASURES}, 'WF_TRANSFORM', {WF_TRANSFORM}, 'WF_MEAN', WF_MEAN, 'WF_SD', WF_SD, ...
+NeuronScore.reference = struct('version', REFERENCE_VERSION, 'file', AXES_FILE, 'WF_MEASURES', {WF_MEASURES}, 'WF_TRANSFORM', {WF_TRANSFORM}, 'WF_MEAN', WF_MEAN, 'WF_SD', WF_SD, ...
     'WF_AXES', WF_AXES, 'WF_EIGENVALUES', WF_EIGENVALUES, 'FP_FEATURES', {FP_FEATURES}, 'FP_TRANSFORM', {FP_TRANSFORM}, 'FP_MEAN', FP_MEAN, ...
-    'FP_SD', FP_SD, 'FP_AXIS', FP_AXIS, 'NOISE_SHAPE', NOISE_SHAPE, 'REF_SAMPLING_RATE', REF_SAMPLING_RATE);
+    'FP_SD', FP_SD, 'FP_AXIS', FP_AXIS, 'NOISE_SHAPE', NOISE_SHAPE, 'REF_SAMPLES', REF_SAMPLES, 'REF_SAMPLING_RATE', REF_SAMPLING_RATE);
 NeuronScore.parameters = struct('WAVEFORM_WEIGHT', WAVEFORM_WEIGHT, 'LOOKALIKE_SIMILARITY', LOOKALIKE_SIMILARITY, ...
-    'CLEAN_SIMILARITY', CLEAN_SIMILARITY, 'MIN_COMPOSITION_UNITS', MIN_COMPOSITION_UNITS);
+    'CLEAN_SIMILARITY', CLEAN_SIMILARITY, 'MIN_COMPOSITION_UNITS', MIN_COMPOSITION_UNITS, 'AXES_FILE', AXES_FILE);
 
 end
 
@@ -259,6 +277,39 @@ switch kind
     otherwise
         y = x;
 end
+end
+
+function A = read_axes(file, wf_measures, wf_transform, fp_features, fp_transform)
+% (new, November 2026) axes of a file written by "FitNeuronAxes", checked
+if ~isfile(file)
+    error("NeuronScores: the axes file %s does not exist (AXES_FILE)", file);
+end
+S = load(file);
+if ~isfield(S, 'NeuronAxes')
+    error("NeuronScores: %s has no axes (variable NeuronAxes, written by FitNeuronAxes)", file);
+end
+A = S.NeuronAxes;
+need = {'version', 'WF_MEASURES', 'WF_TRANSFORM', 'WF_MEAN', 'WF_SD', 'WF_AXES', 'WF_EIGENVALUES', 'FP_FEATURES', 'FP_TRANSFORM', ...
+    'FP_MEAN', 'FP_SD', 'FP_AXIS', 'NOISE_SHAPE', 'REF_SAMPLES', 'REF_SAMPLING_RATE'};
+missing = need(~isfield(A, need));
+if ~isempty(missing)
+    error("NeuronScores: the axes of %s miss %s", file, strjoin(missing, ', '));
+end
+if ~isequal(A.WF_MEASURES, wf_measures) || ~isequal(A.WF_TRANSFORM, wf_transform) || ~isequal(A.FP_FEATURES, fp_features) || ...
+        ~isequal(A.FP_TRANSFORM, fp_transform)
+    error("NeuronScores: the axes of %s use other measures or transformations", file);
+end
+n_wf = numel(wf_measures);  n_fp = numel(fp_features);
+ok = isequal(size(A.WF_MEAN), [1 n_wf]) && isequal(size(A.WF_SD), [1 n_wf]) && isequal(size(A.WF_AXES), [n_wf 2]) && ...
+    numel(A.WF_EIGENVALUES) == 2 && isequal(size(A.FP_MEAN), [1 n_fp]) && isequal(size(A.FP_SD), [1 n_fp]) && ...
+    isequal(size(A.FP_AXIS), [n_fp 1]) && (isempty(A.NOISE_SHAPE) || numel(A.NOISE_SHAPE) == A.REF_SAMPLES) && ...
+    strlength(string(A.version)) > 0;
+if ~ok
+    error("NeuronScores: the axes of %s do not have the expected sizes", file);
+end
+A.version = string(A.version);
+A.WF_EIGENVALUES = A.WF_EIGENVALUES(:)';
+A.NOISE_SHAPE = A.NOISE_SHAPE(:)';
 end
 
 function m = mean_if(x, n_min)
