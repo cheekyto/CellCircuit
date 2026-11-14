@@ -5,7 +5,7 @@ function out = CellCircuit(varargin)
 %   CellCircuit                         opens the window
 %   CellCircuit('table', "rec.xlsx")    opens the window with a recordings table already loaded
 %
-% Four tabs, and a bar with the buttons Run and Stop that is always visible:
+% Five tabs, and a bar with the buttons Run and Stop that is always visible:
 %   1. Recordings:  the recordings table of "run_pipeline" (one row per recording): open it, add the recordings found in a folder, edit it
 %                   (tick boxes "include", group, units to discard, ...) and save it (.xlsx or .csv)
 %   2. Settings:    what to run (the whole pipeline, from a stage to the end, or some stages), which parameters (the default file
@@ -15,7 +15,10 @@ function out = CellCircuit(varargin)
 %                   the MATLAB preferences of that user) and all the parameters (advanced), with a search
 %   3. Run:         summary of the run and the equivalent command, progress of each recording and stage (filled in during the run), the
 %                   messages of the run, and buttons to open the logs and the Excel results
-%   4. Visualization: (new, November 2026) plots of a recording of the table ("plotMEArecording"): raster plot (+ population firing rate),
+%   4. Comparison:  (new, November 2026) comparison of groups of organoids by their neurons ("CompareNeurons"; see "compare_tab"): the
+%                   groups of the recordings tables, the groups used to fit the axes of the neuron scores, the comparisons, the activity
+%                   measures and the models; it has its own button "Run comparison" (the bar at the bottom runs the pipeline)
+%   5. Visualization: (new, November 2026) plots of a recording of the table ("plotMEArecording"): raster plot (+ population firing rate),
 %                   bursts of each unit, electrode map, spike waveforms, and a video of the electrode map (MP4); the recording, its
 %                   dataset, the time window (whole recording, a condition, or typed), the units and the options are chosen in the tab
 % The run is the same as calling "run_pipeline" with the equivalent command shown in the tab Run. Stop: the run stops after the stage that
@@ -79,7 +82,8 @@ tabs = uitabgroup(main);
 tab_rec = uitab(tabs, 'Title', '1. Recordings');
 tab_set = uitab(tabs, 'Title', '2. Settings');
 tab_run = uitab(tabs, 'Title', '3. Run');
-tab_viz = uitab(tabs, 'Title', '4. Visualization');
+tab_cmp = uitab(tabs, 'Title', '4. Comparison');                            % (new, November 2026)
+tab_viz = uitab(tabs, 'Title', '5. Visualization');
 
 % bar at the bottom (always visible)
 bar = uigridlayout(main, [1 5], 'ColumnWidth', {'1x', 90, 120, 90, 70}, 'Padding', [0 0 0 0]);
@@ -228,7 +232,13 @@ uibutton(gr, 'Text', 'Open the results folder', 'ButtonPushedFcn', guard(@on_ope
 uibutton(gr, 'Text', 'Open the Excel results', 'ButtonPushedFcn', guard(@on_open_excel));
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% Tab 4: visualization (new, November 2026; see "plotMEArecording")
+%% Tab 4: comparison of groups by their neurons (new, November 2026; built by "compare_tab")
+
+compare = compare_tab(tab_cmp, struct('table_file', @tab1_table_file, 'results_folder', @results_folder, 'message', @message, ...
+    'guard', @guard, 'with_dialog', @with_dialog, 'open_file', @open_file, 'test', opt.test));
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Tab 5: visualization (new, November 2026; see "plotMEArecording")
 % (revised, user's choices, 14 November 2026) a preview of the plot instead of the equivalent command; the options under the units
 
 g4 = uigridlayout(tab_viz, [1 2], 'ColumnWidth', {440, '1x'});
@@ -357,7 +367,7 @@ tabs.SelectionChangedFcn = guard(@on_tab_change);
 viz_update_view();
 fig.UserData.test = struct('open_table', @open_table, 'add_folder', @add_folder, 'start_folder', @start_folder, 'set_change', @set_change, 'run', @on_run, ...
     'add_to_common', @add_to_common, 'set_change_common', @set_change_common, 'remove_from_common', @remove_from_common, 'default_list', @on_default_list, 'common', @get_common, ...
-    'stop', @on_stop, 'check', @check_settings, 'command', @command_text, 'save_param_file', @save_param_file, ...
+    'stop', @on_stop, 'check', @check_settings, 'command', @command_text, 'save_param_file', @save_param_file, 'compare', compare, ...
     'viz_fill', @viz_fill_recordings, 'viz_load', @viz_load, 'viz_draw', @on_viz_draw, 'viz_inputs', @viz_inputs, 'viz_data', @get_viz_data, ...
     'controls', struct('group', group_field, 'what_mode', what_mode, 'from_stage', from_stage, 'only_checks', only_checks, 'param_mode', param_mode, ...
     'param_file', param_file_field, 'renew', renew_list, 'npy', npy_field, 'project', project_field, 'rec_table', rec_table, ...
@@ -1521,6 +1531,18 @@ end
         end
     end
 
+    function f = tab1_table_file()
+        % (new, November 2026) file of the recordings table of tab 1, saved first if needed ("" if there is no table), for tab 4
+        f = "";
+        if height(rec_table.Data) == 0
+            return
+        end
+        if (table_dirty || strlength(table_file) == 0) && ~save_table(false)
+            return
+        end
+        f = table_file;
+    end
+
     function d = results_folder()
         d = string(project_field.Value);
         if strlength(d) == 0
@@ -1531,7 +1553,7 @@ end
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%   VISUALIZATION   %%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% (new, November 2026) tab 4: plots of a recording with "plotMEArecording"
+% (new, November 2026) tab 5: plots of a recording with "plotMEArecording"
 
     function on_tab_change(~, ev)
         % the list of recordings of the tab Visualization follows the table of tab 1
@@ -2034,7 +2056,10 @@ end
             'Every organoid of the photo becomes its own dataset, named with the labels of "organoid_label" (e.g., 56; 57; 58; empty: ' ...
             'org1, org2...); "picture_organoid" keeps only one of them (its number in the photo). Optional: "picture_3D_side" (side of ' ...
             'the photo with the "3D" text) and "picture_n_organoids"; "crop_ellipse" or "crop_excel" are used instead of the photo.\n\n' ...
-            '4. Visualization: choose a recording of the table and its dataset, what to draw, the time window (the whole recording, a ' ...
+            '4. Comparison (once the groups are compiled): add the recordings tables, press "Find the groups", tick the groups used to fit ' ...
+            'the axes of the neuron scores (at least 20 organoids), add the comparisons, check the activity measures, and press "Run ' ...
+            'comparison". "Save settings..." keeps the settings in a file, to run them again.\n\n' ...
+            '5. Visualization: choose a recording of the table and its dataset, what to draw, the time window (the whole recording, a ' ...
             'condition, or a window you type) and the units, then press Draw. The plots open in their own windows; the video is saved ' ...
             'next to the dataset.']);
         if opt.test

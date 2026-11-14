@@ -4,11 +4,12 @@ function test_CellCircuit()
 % It checks that (1) every parameter of "common_parameters" exists in "pipeline_parameters.m", (2) the window opens, with the common
 % adjustments first and every parameter in the advanced view, (3) the values typed are checked against the type of the value of the file,
 % (4) the equivalent command of "run_pipeline" follows the settings, (5) the window reports the problems that would stop a run, and
-% (6, November 2026) a table built from a folder is saved in that folder by default, and (7, November 2026) the tab Visualization lists
+% (6, November 2026) a table built from a folder is saved in that folder by default, (7, November 2026) the tab Visualization (tab 5) lists
 % the recordings of the table and their datasets (the analyzed one, or the one of the organoid of the row, first), sets the time window
 % (whole recording, a condition, or typed) and the units, shows only the options of the plot chosen (bin of the population rate, unit of
 % the time axis, names of the conditions...), draws a preview of the plot that follows every choice and reports wrong choices in it, and
-% draws the plots and the video (on a synthetic dataset).
+% draws the plots and the video (on a synthetic dataset), and (8, November 2026) tab 4 (comparison of groups by their neurons)
+% finds the groups, reports the problems, saves and opens a settings file and runs "CompareNeurons" (synthetic project).
 % A run itself needs recordings: see the "progress" option of "run_pipeline".
 
 root = fileparts(fileparts(mfilename('fullpath')));
@@ -162,7 +163,7 @@ t3.open_table(file);
 assert(t3.start_folder() == string(fileparts(file)), "the folder of the opened table is not suggested");
 fprintf('a table built from a folder is saved there by default; the datasets written by SelectElectrodes are not listed\n');
 
-% (November 2026) tab 4. Visualization, on a synthetic recording: a dataset after the QC, its analyzed dataset, and a cropped dataset
+% (November 2026) tab 5. Visualization, on a synthetic recording: a dataset after the QC, its analyzed dataset, and a cropped dataset
 vfolder = fullfile(folder, 'viz', 'recV');   mkdir(vfolder);
 trains = {0.05:0.1:39.99, 0.3:0.5:39.99, [1:2:29, 30.2:0.1:31]};          % (spike times, in sec)
 spikeTimestamp = struct('timeStamp', cellfun(@(x) x(:)*1000, trains, 'UniformOutput', false), 'positionXY', {[10 20], [30 30], [5 50]}, ...
@@ -278,6 +279,55 @@ c4.viz_from.Value = 29;   c4.viz_to.Value = 31;   c4.viz_from.ValueChangedFcn(c4
 assert(isempty(f) && res.n_frames == 5 && isfile(res.file) && endsWith(res.file, "recV_org1_video_29-31s.mp4") && ...
     contains(c4.viz_result.Text, "Video saved") && c4.viz_draw.Enable == "on", "the video was not made");
 fprintf('tab Visualization: recordings, datasets, time window, units, options, names of the conditions, preview, plots and video\n');
+
+% (new, November 2026) tab 4: comparison of groups by their neurons ("CompareNeurons"), on the synthetic project of its test
+tab_group = findall(fig3, 'Type', 'uitabgroup');
+assert(isequal(string({tab_group.Children.Title}), ["1. Recordings", "2. Settings", "3. Run", "4. Comparison", "5. Visualization"]), ...
+    "the tabs are not 1. Recordings, 2. Settings, 3. Run, 4. Comparison, 5. Visualization (user's choice)");
+cp = t3.compare;   cc = cp.controls;
+compare_project = fullfile(folder, 'compare');
+make_compare_project(compare_project);
+cp.add_table(fullfile(compare_project, 'recordings.csv'), "");
+cp.find_groups();
+G = cc.groups.Data;
+assert(isequal(G.Group, ["A"; "B"; "C"]) && all(G.Organoids == 8) && all(G.Compiled) && all(G.("Use for the axes")), "the groups were not found");
+assert(contains(cc.count.Text, "24 organoids of 3 groups"), "wrong count of the organoids for the axes: %s", cc.count.Text);
+assert(isequal(string(cc.random.Items), "batch") && any(string(cc.covariates.Items) == "batch") && ...
+    any(string(cc.columns.Items) == "NETbursting1.Rate_NETburst"), "the extra columns of the table or the compiled columns are not offered");
+D = CompareNeurons("defaults");
+assert(isequal([string(cc.activity.Data.Name), string(cc.activity.Data.Column), string(cc.activity.Data.Transformation), ...
+    string(cc.activity.Data.Organoids)], D.ACTIVITY), "the activity measures are not the default list");
+cp.set_axes_groups(["A", "B"]);
+problems = cp.check();
+assert(any(contains(problems, "at least 20")) && any(contains(problems, "comparison")), "the problems that stop a comparison are not reported");
+cp.set_axes_groups([]);
+cp.add_comparison(["A", "B"]);
+cc.random.Value = {'batch'};
+assert(isempty(cp.check()), "a complete comparison is reported as not ready: %s", strjoin(cp.check(), '; '));
+S = cp.settings();
+assert(isequal(S.FIT_GROUPS, ["A", "B", "C"]) && isequal(S.COMPARISONS, {["A", "B"]}) && S.RANDOM == "batch" && ...
+    isequal(S.ACTIVITY, D.ACTIVITY) && S.TABLES == string(fullfile(compare_project, 'recordings.csv')), "wrong settings from the tab");
+% the settings saved as a file: the same settings for CompareNeurons, and the tab filled in again from the file
+settings_file = fullfile(folder, 'my_comparison.m');
+cp.save_settings(settings_file);
+F = run_settings_file(settings_file);
+for f = ["TABLES", "PROJECTS", "FIT_GROUPS", "COMPARISONS", "ACTIVITY", "COMPOSITION", "COVARIATES", "RANDOM", "ROLES", "MIN_BURSTS"]
+    if iscell(F.(f))
+        same = isequal(F.(f), S.(f));
+    else
+        same = isequal(string(F.(f)), string(S.(f)));
+    end
+    assert(same, "the settings file changed %s", f);
+end
+cp.add_comparison(["A", "C"]);   cc.random.Value = {};
+cp.load_settings(settings_file);
+assert(isequal(cc.comparisons.Items, {'A vs B'}) && isequal(cc.random.Value, {'batch'}), "the settings file did not fill in the tab");
+% the run
+cc.output.Value = fullfile(folder, 'compare_results');   cc.name.Value = 'tabtest';
+assert(cp.run(), "the comparison did not run");
+assert(~isempty(dir(fullfile(folder, 'compare_results', 'tabtest_*.xlsx'))) && any(contains(string(cc.log.Value), "Done:")), ...
+    "the results of the comparison were not written");
+fprintf('tab 4: groups found, problems reported, settings saved and opened again, comparison run\n');
 fprintf('test_CellCircuit: all checks passed\n');
 
 end
@@ -288,6 +338,13 @@ labels = findall(fig, 'Type', 'uilabel');
 txt = string({labels.Text});
 txt = txt(contains(txt, "recordings ticked"));
 assert(isscalar(txt), "the count of recordings ticked was not found");
+end
+
+function S = run_settings_file(file)
+% the structure C built by a settings file of "CompareNeurons"
+C = struct();
+run(file);
+S = C;
 end
 
 function P = current_prefs()
