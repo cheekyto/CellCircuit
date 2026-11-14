@@ -65,7 +65,7 @@ When a measure is a median, it is taken over the ensembles of the condition.
 | nLeader | ensembles that fire just before the bursts start (in the onset of at least 25% of the bursts) | # | ✓ |
 | nCore, nTail, nReverberation, nSmallEvent, nBaseline | ensembles with each of the other roles | # | |
 | leaderLead | how early the leaders fire before the burst starts | s | |
-| orderConsistency | is the ensemble order the same in every burst? (0 = chance, 1 = the same order every time) | 0–1 | ✓ |
+| orderConsistency | is the ensemble order the same in every burst? (0 = chance, 1 = the same order every time; below 0 = more mixed than chance, see below) | ≤ 1 | ✓ |
 | orderP | p value of the order consistency | p | |
 | orderMatch | match of each burst with the usual order (Kendall tau, median over the bursts) | −1 to 1 | ✓ |
 | orderSpan, orderSpanFraction | time from the first to the last ensemble of the usual order | s, fraction of the burst | |
@@ -75,16 +75,18 @@ When a measure is a median, it is taken over the ensembles of the condition.
 | smallRecruited | when a small event recruits ensembles, the share of the ensembles it recruits (mean over the small events with an active ensemble; added November 2026) | % | ✓ |
 | smallPosition | which ensembles the small events recruit (0 = the leading ones, 1 = the late ones) | 0–1 | |
 | smallAgreement | do the small events follow the burst order? (0.5 = chance, 1 = the same order) | 0–1 | ✓ |
-| smallConsistency | is the order of the small events the same in every one? (their own order; 0 = chance, 1 = always; added November 2026) | 0–1 | ✓ |
+| smallConsistency | is the order of the small events the same in every one? (their own order; 0 = chance, 1 = always, below 0 = more mixed than chance; added November 2026) | ≤ 1 | ✓ |
 | smallAgreementP, smallConsistencyP | p values | p | |
 | secondaryWithCNE | share of the secondary events (reverberations) with at least one active ensemble | % | ✓ |
 | secondaryRecruited | when a secondary event recruits ensembles, the share of the ensembles it recruits (mean over the secondary events with an active ensemble; added November 2026) | % | ✓ |
 | secondaryPosition | which ensembles the secondary events recruit (0 = the leading ones, 1 = the late ones) | 0–1 | |
 | secondaryAgreement | do the secondary events follow the burst order? (0.5 = chance, 1 = the same order) | 0–1 | ✓ |
-| secondaryConsistency | is the order of the secondary events the same in every one? (their own order; 0 = chance, 1 = always) | 0–1 | ✓ |
+| secondaryConsistency | is the order of the secondary events the same in every one? (their own order; 0 = chance, 1 = always, below 0 = more mixed than chance) | ≤ 1 | ✓ |
 | secondaryAgreementP, secondaryConsistencyP | p values | p | |
 | referenceAgreement, referenceAgreementP, referenceMatch | bursts against the order of another condition. Only with a reference order; the comparison sheet reports referenceAgreement | 0–1, p, tau | |
 | noBursting, notDescribed | why cells are blank (see below) | yes/no | ✓ as the note |
+
+The three consistency measures can be negative (corrected November 2026; this page gave them as 0–1). The raw consistency S is, over the pairs of ensembles active together, the share of events in which they come in their more usual order, rescaled from 0 (50/50) to 1 (always the same order); it does not depend on the direction, so an order that is always reversed also gives 1. It is reported relative to chance, (S − S0)/(1 − S0), where S0 is the mean of S when the times are mixed among the active ensembles of each event. When the order is more mixed than that, the value is below 0. The lowest possible value depends on S0, so on the number of events and ensembles: with 2 ensembles active together in 5 bursts it is −0.28. A value slightly below 0 means "no consistent order", like 0.
 
 ---
 
