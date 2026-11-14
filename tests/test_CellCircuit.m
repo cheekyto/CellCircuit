@@ -4,7 +4,11 @@ function test_CellCircuit()
 % It checks that (1) every parameter of "common_parameters" exists in "pipeline_parameters.m", (2) the window opens, with the common
 % adjustments first and every parameter in the advanced view, (3) the values typed are checked against the type of the value of the file,
 % (4) the equivalent command of "run_pipeline" follows the settings, (5) the window reports the problems that would stop a run, and
-% (6, November 2026) a table built from a folder is saved in that folder by default.
+% (6, November 2026) a table built from a folder is saved in that folder by default, and (7, November 2026) the tab Visualization lists
+% the recordings of the table and their datasets (the analyzed one, or the one of the organoid of the row, first), sets the time window
+% (whole recording, a condition, or typed) and the units, shows only the options of the plot chosen (bin of the population rate, unit of
+% the time axis, names of the conditions...), draws a preview of the plot that follows every choice and reports wrong choices in it, and
+% draws the plots and the video (on a synthetic dataset).
 % A run itself needs recordings: see the "progress" option of "run_pipeline".
 
 root = fileparts(fileparts(mfilename('fullpath')));
@@ -157,6 +161,123 @@ assert(t3.start_folder() == string(project), "the folder whose recordings were a
 t3.open_table(file);
 assert(t3.start_folder() == string(fileparts(file)), "the folder of the opened table is not suggested");
 fprintf('a table built from a folder is saved there by default; the datasets written by SelectElectrodes are not listed\n');
+
+% (November 2026) tab 4. Visualization, on a synthetic recording: a dataset after the QC, its analyzed dataset, and a cropped dataset
+vfolder = fullfile(folder, 'viz', 'recV');   mkdir(vfolder);
+trains = {0.05:0.1:39.99, 0.3:0.5:39.99, [1:2:29, 30.2:0.1:31]};          % (spike times, in sec)
+spikeTimestamp = struct('timeStamp', cellfun(@(x) x(:)*1000, trains, 'UniformOutput', false), 'positionXY', {[10 20], [30 30], [5 50]}, ...
+    'cluster', {1, 2, 3}, 't_step', 0.05);
+rec_conditions = {'recV.brw', [0 30]; 'recV_ttx_00.brw', [30 40]};
+save(fullfile(vfolder, 'recV_QCmanual.mat'), 'spikeTimestamp', 'rec_conditions');
+save(fullfile(vfolder, 'recV_curated_QCmanual.mat'), 'spikeTimestamp', 'rec_conditions');
+crop_outline = [5 15; 25 15; 25 35; 5 35];
+save(fullfile(vfolder, 'recV_org1_QCmanual.mat'), 'spikeTimestamp', 'rec_conditions', 'crop_outline');
+vtable = fullfile(folder, 'viz', 'viz.csv');
+writetable(table([1;1], string([vfolder; vfolder]), ["recV"; "recV"], ["g"; "g"], ["";"org1"], 'VariableNames', ...
+    {'include', 'folder', 'file_name', 'group', 'organoid_label'}), vtable);
+fig4 = CellCircuit('test', true, 'table', vtable);
+closer4 = onCleanup(@() delete(fig4));
+t4 = fig4.UserData.test;   c4 = t4.controls;
+assert(isempty(t4.viz_data()) && isempty(findobj(c4.viz_preview, 'Type', 'axes')), "a dataset was read before the tab was opened");
+b_draw = c4.viz_draw;
+b_draw.ButtonPushedFcn(b_draw, []);                                          % (nothing chosen: a message, no error)
+c4.rec_table.Selection = 2;                                                  % the row selected in tab 1 is proposed in the tab
+c4.tabs.SelectionChangedFcn(c4.tabs, struct('NewValue', c4.tab_viz));
+assert(numel(c4.viz_rec.Items) == 2 && c4.viz_rec.Value == 2 && contains(c4.viz_rec.Items{2}, "organoid org1"), "the recordings of the table are not listed");
+assert(isequal(string(c4.viz_dataset.Items), ["recV_org1", "recV_curated   (analyzed)", "recV"]), "datasets: %s", strjoin(string(c4.viz_dataset.Items), " | "));
+D = t4.viz_data();
+assert(D.name == "recV_org1" && D.outline_source == "cropping (photo)" && contains(c4.viz_info.Text, "3 units") && ...
+    contains(c4.viz_info.Text, "+TTX (30-40 s)") && ~contains(c4.viz_info.Text, "utline"), ...
+    "the dataset of the organoid of the row was not read (or the outline is still in the text): %s", c4.viz_info.Text);
+% (user's request) preview of the plot in the tab: the raster plot as an image, updated with every choice
+assert(isscalar(findobj(c4.viz_preview, 'Type', 'image')) && numel(findobj(c4.viz_preview, 'Type', 'axes')) == 2 && ...
+    c4.viz_preview_label.Text == "3 neurons, 0-40 s", "no preview after reading the dataset: %s", c4.viz_preview_label.Text);
+c4.viz_rec.Value = 1;   c4.viz_rec.ValueChangedFcn(c4.viz_rec, []);
+assert(t4.viz_data().name == "recV_curated" && string(c4.viz_dataset.Value) == string(fullfile(vfolder, 'recV_curated_QCmanual.mat')), ...
+    "the analyzed dataset is not chosen first");
+assert(isequal(c4.viz_time.ItemsData, [0 1 2 -1]) && c4.viz_from.Value == 0 && c4.viz_to.Value == 40, "the time windows are not listed");
+% time window: a condition, then a window typed (Custom); the preview follows
+c4.viz_time.Value = 1;   c4.viz_time.ValueChangedFcn(c4.viz_time, []);
+in = t4.viz_inputs();
+assert(c4.viz_from.Value == 0 && c4.viz_to.Value == 30 && in.condition == 1 && c4.viz_preview_label.Text == "3 neurons, 0-30 s", ...
+    "condition: %s", c4.viz_preview_label.Text);
+c4.viz_from.Value = 5;   c4.viz_to.Value = 20;   c4.viz_from.ValueChangedFcn(c4.viz_from, []);
+in = t4.viz_inputs();
+assert(c4.viz_time.Value == -1 && isequal(in.window, [5 20]) && ~isfield(in, 'condition') && c4.viz_preview_label.Text == "3 neurons, 5-20 s", ...
+    "a window typed: %s", c4.viz_preview_label.Text);
+% units typed, and a wrong unit reported (in the preview, and when drawing)
+c4.viz_units.Value = '1 - 2, 3';   c4.viz_units.ValueChangedFcn(c4.viz_units, []);
+in = t4.viz_inputs();
+assert(strcmp(c4.viz_units_mode.Value, 'list') && isequal(in.units, [1 2 3]), "units typed");
+c4.viz_units.Value = '1 x';   c4.viz_units.ValueChangedFcn(c4.viz_units, []);
+assert(contains(c4.viz_preview_label.Text, "not a unit number") && isempty(findobj(c4.viz_preview, 'Type', 'axes')), ...
+    "a wrong unit is not reported in the preview: %s", c4.viz_preview_label.Text);
+b_draw.ButtonPushedFcn(b_draw, []);
+assert(contains(c4.status.Text, "not a unit number"), "a wrong unit is not reported when drawing: %s", c4.status.Text);
+c4.viz_units.Value = '1:2';   c4.viz_units.ValueChangedFcn(c4.viz_units, []);
+assert(c4.viz_preview_label.Text == "2 neurons, 5-20 s", "the preview did not follow the units: %s", c4.viz_preview_label.Text);
+% (user's choices) bin of the population rate in ms, unit of the time axis, names of the conditions (condition and dose, or file name)
+c4.viz_bin.Value = 1000;   c4.viz_tunit.Value = 'min';   c4.viz_tunit.ValueChangedFcn(c4.viz_tunit, []);
+in = t4.viz_inputs();
+ax_p = findobj(c4.viz_preview, 'Type', 'axes');
+assert(in.rate_bin == 1 && in.time_unit == "min" && all(arrayfun(@(a) max(abs(a.XLim - [5 20]/60)) < 1e-12, ax_p)), "bin or time unit not passed");
+c4.viz_tunit.Value = 's';   c4.viz_from.Value = 0;   c4.viz_to.Value = 40;   c4.viz_from.ValueChangedFcn(c4.viz_from, []);
+names = @() sort(string(get(findobj(c4.viz_preview, 'Tag', 'condition_name'), 'String')))';
+assert(isequal(names(), ["+TTX", "Baseline"]), "names of the conditions in the preview: %s", strjoin(names(), " | "));
+c4.viz_names.Value = 'file';   c4.viz_names.ValueChangedFcn(c4.viz_names, []);
+assert(isequal(names(), ["Baseline", "ttx_00"]) && contains(c4.viz_info.Text, "ttx_00 (30-40 s)") && any(contains(c4.viz_time.Items, "ttx_00")) && ...
+    t4.viz_inputs().condition_names == "file", "names by file name: %s", c4.viz_info.Text);
+c4.viz_names.Value = 'treatment';   c4.viz_names.ValueChangedFcn(c4.viz_names, []);
+c4.viz_from.Value = 5;   c4.viz_to.Value = 20;   c4.viz_from.ValueChangedFcn(c4.viz_from, []);
+% only the options of the plot chosen are shown (rows: population rate, bin, raster, conditions, names, time axis, rate, color scale,
+% colors, electrodes without neurons, outline, step, speed, save)
+shown = @() cellfun(@(h) h > 0, c4.viz_options.RowHeight);
+assert(isequal(shown(), logical([1 1 0 1 1 1 0 0 0 0 0 0 0 1])), "raster: wrong options shown");
+c4.viz_pop.Value = false;   c4.viz_pop.ValueChangedFcn(c4.viz_pop, []);
+assert(isequal(shown(), logical([1 0 0 1 1 1 0 0 0 0 0 0 0 1])), "the bin is shown without the population rate");
+c4.viz_pop.Value = true;
+c4.viz_type.Value = 'map';   c4.viz_type.ValueChangedFcn(c4.viz_type, []);
+assert(isequal(shown(), logical([0 0 0 0 0 0 1 1 1 1 1 0 0 1])), "map: wrong options shown");
+c4.viz_cmap.Value = 'hot';   c4.viz_cmap.ValueChangedFcn(c4.viz_cmap, []);       % (colors of the map, user's request)
+ax_m = findobj(c4.viz_preview, 'Type', 'axes');
+assert(t4.viz_inputs().MAP_COLORMAP == "hot" && isequal(ax_m.Colormap, hot(256)), "the colors of the map were not passed to the preview");
+c4.viz_cmap.Value = 'jet';   c4.viz_cmap.ValueChangedFcn(c4.viz_cmap, []);
+c4.viz_empty.Value = 'white';   c4.viz_empty.ValueChangedFcn(c4.viz_empty, []);    % (electrodes without neurons, user's request)
+ax_m = findobj(c4.viz_preview, 'Type', 'axes');
+assert(t4.viz_inputs().empty_color == "white" && isequal(ax_m.Color, [1 1 1]), "the color of the electrodes without neurons was not passed");
+c4.viz_empty.Value = 'black';   c4.viz_empty.ValueChangedFcn(c4.viz_empty, []);
+c4.viz_type.Value = 'video';   c4.viz_type.ValueChangedFcn(c4.viz_type, []);
+assert(isequal(shown(), logical([1 1 1 1 1 1 0 1 1 1 1 1 1 0])) && string(c4.viz_draw.Text) == "Make the video" && ...
+    startsWith(c4.viz_preview_label.Text, "First frame of the video") && ~isfile(fullfile(vfolder, 'recV_curated_video_5-20s.mp4')), ...
+    "video: wrong options shown, or the preview wrote the video");
+c4.viz_type.Value = 'waveforms';   c4.viz_type.ValueChangedFcn(c4.viz_type, []);
+p_time = findall(fig4, 'Type', 'uipanel', 'Title', 'Time window');
+assert(p_time.Visible == "off" && ~isfield(t4.viz_inputs(), 'window') && contains(c4.viz_preview_label.Text, "Kilosort templates"), ...
+    "waveforms: the time window is still shown or used, or the missing templates are not reported in the preview");
+c4.viz_limit.Value = 'abc';   c4.viz_type.Value = 'map';   c4.viz_type.ValueChangedFcn(c4.viz_type, []);
+assert(contains(c4.viz_preview_label.Text, "top of the color scale"), "a wrong color limit is not reported");
+c4.viz_limit.Value = '';
+% plots drawn: raster (saved as PNG next to the dataset), map with the outline of the cropping, video
+c4.viz_type.Value = 'raster';   c4.viz_save.Value = true;   c4.viz_type.ValueChangedFcn(c4.viz_type, []);
+assert(~isfile(fullfile(vfolder, 'recV_curated_raster_5-20s.png')), "the preview saved the plot");
+[f, res] = t4.viz_draw();
+n_exp = sum(trains{1} >= 5 & trains{1} < 20) + sum(trains{2} >= 5 & trains{2} < 20);
+assert(isvalid(f) && res.n_spikes == n_exp && isequal(res.window, [5 20]) && isfile(res.file) && contains(c4.viz_result.Text, "saved"), ...
+    "the raster plot was not drawn or saved");
+close(f);
+c4.viz_rec.Value = 2;   c4.viz_rec.ValueChangedFcn(c4.viz_rec, []);
+c4.viz_type.Value = 'map';   c4.viz_save.Value = false;   c4.viz_units_mode.Value = 'all';   c4.viz_type.ValueChangedFcn(c4.viz_type, []);
+assert(isscalar(findobj(c4.viz_preview, 'Tag', 'outline')), "the preview of the map has no outline");
+[f, res] = t4.viz_draw();
+assert(isvalid(f) && isscalar(findobj(f, 'Tag', 'outline')) && res.outline_source == "cropping (photo)" && nnz(~isnan(res.map)) == 3, ...
+    "the map was not drawn with the outline of the cropping");
+close(f);
+c4.viz_type.Value = 'video';   c4.viz_type.ValueChangedFcn(c4.viz_type, []);
+c4.viz_from.Value = 29;   c4.viz_to.Value = 31;   c4.viz_from.ValueChangedFcn(c4.viz_from, []);
+[f, res] = t4.viz_draw();
+assert(isempty(f) && res.n_frames == 5 && isfile(res.file) && endsWith(res.file, "recV_org1_video_29-31s.mp4") && ...
+    contains(c4.viz_result.Text, "Video saved") && c4.viz_draw.Enable == "on", "the video was not made");
+fprintf('tab Visualization: recordings, datasets, time window, units, options, names of the conditions, preview, plots and video\n');
 fprintf('test_CellCircuit: all checks passed\n');
 
 end
