@@ -6,7 +6,8 @@ function T = make_recordings_table(main_folder, output_file, varargin)
 %   file_name:  name of the recording, taken from the name of its file "<name>_QCmanual.mat" (the file name without "_QCmanual.mat")
 %   picture:    (November 2026) photo of the chip found in the folder of the recording ("recording_picture"; empty when there is none, or
 %               several: the folders with several photos are listed, to choose one by hand)
-%   picture_organoid:   empty, to be filled by hand with the number of the organoid in the photo (needed to run "SelectElectrodes")
+%   picture_organoid:   empty: every organoid of the photo is cropped by "SelectElectrodes", with the labels written in organoid_label
+%                       (e.g., "56; 57; 58"), or org1, org2...; or write the number of one organoid in the photo
 % The datasets written by "SelectElectrodes" ("<name>_<organoid_label>_QCmanual.mat", and the later files of the cropped dataset) are not
 % recordings of their own and are left out ("cropped_datasets"): the cropping is run, or run again, from the row of the recording
 
@@ -111,7 +112,8 @@ if ~isempty(empty)
     fprintf('%d folders without a file "*%s":\n', numel(empty), suffix);
     fprintf('   %s\n', empty);
 end
-fprintf('%d of %d recordings with a photo of the chip (column picture; write the number of the organoid in picture_organoid)\n', ...
+fprintf(['%d of %d recordings with a photo of the chip (column picture; every organoid of the photo is cropped, with the labels of ' ...
+    'organoid_label, e.g. "56; 57; 58", or org1, org2...)\n'], ...
     nnz(strlength(T.picture) > 0), height(T));
 if ~isempty(several)
     fprintf('%d folders with several photos (write the one to use in the column picture):\n', numel(several));

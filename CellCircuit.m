@@ -88,9 +88,12 @@ g1 = uigridlayout(tab_rec, [5 1], 'RowHeight', {'fit', 'fit', 'fit', '1x', 'fit'
 uilabel(g1, 'WordWrap', 'on', 'Text', ['One row per recording, each in its own folder. Tick "include" to run it. "group": the recordings of the ' ...
     'same group are compiled together in one Excel file. "file_name": the common name of the files of the recording (for a new Kilosort ' ...
     'recording, the name you choose for its files). Optional: "to_discard", units to discard by hand (e.g., 3 17 25); "source", Kilosort or ' ...
-    '3Brain; "organoid_label" with "picture" (photo of the chip, found in the folder of the recording) and "picture_organoid" (number of the ' ...
-    'organoid in the photo; needed to run the cropping), to keep only the electrodes under the organoid (optional: "picture_3D_side", side ' ...
-    'of the photo where the "3D" text is, and "picture_n_organoids"; "crop_ellipse" or "crop_excel", when given, are used instead of the photo); ' ...
+    '3Brain; "picture", the photo of the chip, to keep only the electrodes under each organoid (empty: the photo in the folder of the ' ...
+    'recording; "none": no cropping): every organoid of the photo is cropped as its own dataset, with the labels of "organoid_label" ' ...
+    '(e.g., 56; 57; 58: as many labels as organoids; empty: org1, org2...), saved and kept at the next runs; or only the one given by ' ...
+    '"picture_organoid" (its number in the photo, with one label) (optional: ' ...
+    '"picture_3D_side", side of the photo where the "3D" text is, and "picture_n_organoids"; "crop_ellipse" or "crop_excel", with ' ...
+    '"organoid_label", are used instead of the photo); ' ...
     '"file_name_3Brain", a 3Brain dataset to combine with the Kilosort one.']);
 b1 = uigridlayout(g1, [1 9], 'ColumnWidth', {105, 170, 105, 115, 90, 160, 60, 75, '1x'}, 'Padding', [0 0 0 0]);
 uibutton(b1, 'Text', 'Open table...', 'ButtonPushedFcn', guard(@on_open_table), 'Tooltip', 'Open a recordings table (.xlsx or .csv)');
@@ -398,13 +401,21 @@ end
         end
         T = rec_table.Data;     r = rows(1);
         pic = strtrim(T.picture(r));
-        if strlength(pic) == 0
-            message('This recording has no picture (column picture).', 'Organoids in the picture');
-            return
-        end
         folder = strtrim(T.folder(r));
         if isempty(regexp(char(folder), '^(/|~|[A-Za-z]:[\\/]|\\\\)', 'once')) && strlength(table_file) > 0
             folder = string(fullfile(fileparts(table_file), folder));       % (relative to the folder of the table)
+        end
+        if strlength(pic) == 0                                              % (as the run: the photo in the folder of the recording)
+            [pic, candidates] = recording_picture(folder, strtrim(T.file_name(r)));
+            if strlength(pic) == 0 && numel(candidates) > 1
+                message(sprintf('Several photos in the folder of this recording (%s): write the one to use in the column picture.', ...
+                    strjoin(candidates, ', ')), 'Organoids in the picture');
+                return
+            end
+        end
+        if strlength(pic) == 0 || lower(pic) == "none"
+            message('This recording has no photo of the chip (column picture, or the folder of the recording).', 'Organoids in the picture');
+            return
         end
         if isempty(regexp(char(pic), '^(/|~|[A-Za-z]:[\\/]|\\\\)', 'once'))
             pic = string(fullfile(folder, pic));                            % (a file in the folder of the recording)
@@ -414,7 +425,8 @@ end
         set_status(sprintf('Finding the organoids in %s...', pic));     drawnow;
         try
             res = OrganoidsFromPhoto(pic, struct('TEXT_SIDE', lower(strtrim(T.picture_3D_side(r))), 'N_ORGANOIDS', n));
-            set_status(sprintf('%d organoid(s) in the picture of row %d; %s', res.n_organoids, r, res.orientation.message));
+            set_status(sprintf(['%d organoid(s) in the picture of row %d (the labels of organoid_label, or org1, org2..., are given in ' ...
+                'this order at the first run); %s'], res.n_organoids, r, res.orientation.message));
         catch ME
             message(sprintf('The organoids could not be found in %s: %s', pic, ME.message), 'Organoids in the picture');
         end

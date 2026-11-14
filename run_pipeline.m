@@ -35,14 +35,19 @@ function run_pipeline(recordings, varargin)
 %       to_discard          clusters discarded by "QualityControl_Manual" (e.g., "3 17 25"; the indexes are defined after eliminating
 %                           the silent clusters); empty: none
 %       organoid_label      label of the organoid, with crop_ellipse ("x0 y0 radiusx radiusy", in pixels) or crop_excel (file of the
-%                           3Brain electrode map), or picture with picture_organoid: "SelectElectrodes" runs only for the recordings
-%                           with one of them
+%                           3Brain electrode map). With the photo of the chip: the labels of its organoids, separated by ";" (e.g.,
+%                           "56; 57; 58"), given to them in the order of the photo (from the top down) and kept at the next runs (below);
+%                           their number must be the number of organoids found (else the run does not start); empty: org1, org2...
 %       picture             (November 2026) photo of the chip (file in the folder of the recording, or full path): "SelectElectrodes"
 %                           keeps the electrodes under the organoid found in the photo ("OrganoidsFromPhoto", option 3, the default;
-%                           crop_ellipse or crop_excel, when given, are used instead). When "SelectElectrodes" is run, a recording
-%                           with a picture needs picture_organoid (the run does not start without it)
-%       picture_organoid    number of the organoid in the photo (as numbered in the figure of OrganoidsFromPhoto(picture), from the top
-%                           of the array down)
+%                           crop_ellipse or crop_excel, when given, are used instead). Empty: the photo in the folder of the recording,
+%                           when there is one (none: every electrode is kept; several: the run does not start, write the one to use);
+%                           "none": no cropping
+%       picture_organoid    (optional) number of the organoid in the photo (as numbered in the figure of OrganoidsFromPhoto(picture), from
+%                           the top of the array down): only that organoid, with one label. Empty: every organoid of the photo is
+%                           cropped, each as its own dataset "<file_name>_<label>" (one row of the table, run once per organoid); the
+%                           labels are saved with the place of each organoid on the electrode map in "<file_name>_organoids.mat" (folder
+%                           of the recording), and the next runs give them to the same organoids
 %       picture_3D_side     (optional) side of the photo where the "3D" text of the chip is (right, top, left, bottom); empty: found
 %                           from the photo (when given, it is checked against the pattern of the chip around the array)
 %       picture_n_organoids (optional) number of organoids on the chip; empty: found from the photo
@@ -154,15 +159,7 @@ recs = select_rows(recs, opts.rows);                                        % lo
 if isempty(recs)
     error("No recording to run (check the column 'include' and the option 'rows')");
 end
-if ismember("SelectElectrodes", stages)                                     % (November 2026) a picture needs the number of the organoid
-    no_number = arrayfun(@(rec) strlength(rec.picture) > 0 && isempty(rec.picture_organoid) && isempty(rec.crop_ellipse) ...
-        && strlength(rec.crop_excel) == 0, recs);
-    if any(no_number)
-        error(['Row(s) %s of the recordings table have a picture but no picture_organoid: write the number of the organoid in the ' ...
-            'photo (to see the numbering: OrganoidsFromPhoto("%s")), or empty the column picture to keep every electrode'], ...
-            strjoin(string([recs(no_number).row]), ', '), recs(find(no_number, 1)).picture);
-    end
-end
+[recs, notes] = assign_organoids(recs, ismember("SelectElectrodes", stages));   % (November 2026) photos found, organoids labeled
 n_rec = numel(recs);
 project = string(opts.project);
 if strlength(project) == 0
@@ -213,19 +210,24 @@ fprintf("    parameters: %s%s\n", source_text, changes_text);
 if ~verbose
     fprintf("    the messages of the stages are saved in the log file of each recording (<file_name>_pipeline_log.txt)\n");
 end
+for note = notes'
+    fprintf("    %s\n", note);
+end
 
 rec_stages = stages(stages ~= "Compile_MEAproject");
+pre_crop = STAGES(1:find(STAGES == "SelectElectrodes") - 1);                % stages before the cropping (the same for every organoid)
+done_pre = strings(0,1);                                                    % "row|stage" already run in this run
 errors = strings(0,1);
 ok_rec = true(n_rec,1);
 % (new, November 2026) progress of the run, for the option 'progress' (e.g., the window "CellCircuit"); stopped: the user asked to stop
-stopped = report_progress(opts.progress, 'type', "start", 'recordings', [recs.file_name], 'groups', [recs.group], 'stages', stages, ...
+stopped = report_progress(opts.progress, 'type', "start", 'recordings', string(arrayfun(@display_name, recs, 'UniformOutput', false)), 'groups', [recs.group], 'stages', stages, ...
     'parameters', source_text + changes_text);
 for r=1:n_rec
     if isempty(rec_stages) || stopped
         break
     end
     rec = recs(r);
-    fprintf("\n[%d/%d] %s (group: %s) - %s\n", r, n_rec, rec.file_name, rec.group, now_text('HH:mm'));
+    fprintf("\n[%d/%d] %s (group: %s) - %s\n", r, n_rec, display_name(rec), rec.group, now_text('HH:mm'));
     if end_to_end && rec.source == "3Brain"
         fprintf("      skipped: 3Brain recordings run step by step (option 'stages')\n");
         ok_rec(r) = false;
@@ -262,6 +264,11 @@ for r=1:n_rec
     record = start_record(file_params, P, rec_stages, source_text, changes_text, opts.changes, code_ver);
 
     for st = rec_stages
+        if rec.expanded && ismember(st, pre_crop) && ismember(string(rec.row) + "|" + st, done_pre)
+            fprintf("      %-28s already run for this recording (another organoid of its photo)\n", st);
+            report_progress(opts.progress, 'type', "stage", 'index', r, 'stage', st, 'state', "skipped", 'message', "already run for this recording");
+            continue
+        end
         [inputs, skip] = stage_inputs(st, rec, end_to_end, verbose);
         if strlength(skip) > 0
             fprintf("      %-28s skipped (%s)\n", st, skip);
@@ -274,6 +281,7 @@ for r=1:n_rec
             fprintf("%s\n", done_text(elapsed, verbose, st));
             record.parameters_stage.(st) = P;
             record.history(end).stages_done(end+1) = st;
+            if ismember(st, pre_crop), done_pre(end+1) = string(rec.row) + "|" + st; end %#ok<AGROW>
             if st == "Analyze_spikeTrain"                                   % collect the analyzed file in the folder of its group
                 collect_analyzed(rec, project);
             end
@@ -442,6 +450,7 @@ switch stage
         else                                                                % (November 2026) photo of the chip
             inputs.option = 3;      inputs.file_photo = char(rec.picture);  inputs.photo_organoid = rec.picture_organoid;
             inputs.photo_text_side = rec.picture_3D_side;   inputs.photo_n_organoids = rec.picture_n_organoids;
+            inputs.photo_position = rec.photo_position;                     % (saved place of the organoid: it keeps its label)
         end
     case "IntegrateDataSets"
         if rec.source == "3Brain"                                           % a 3Brain dataset alone
@@ -663,7 +672,197 @@ end
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 function ok = has_crop(rec)
 
-ok = ~isempty(rec.crop_ellipse) || strlength(rec.crop_excel) > 0 || (strlength(rec.picture) > 0 && ~isempty(rec.picture_organoid));
+ok = ~isempty(rec.crop_ellipse) || strlength(rec.crop_excel) > 0 || (strlength(rec.picture) > 0 && rec.picture ~= "none" ...
+    && ~isempty(rec.picture_organoid));
+
+end
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+function [out, notes] = assign_organoids(recs, cropping)
+
+% (new, November 2026) photo of the chip and organoids of each recording cropped from its photo (no crop_ellipse, no crop_excel):
+%   - picture empty: the photo in the folder of the recording ("recording_picture"; the one of the saved labels, if any); none: no
+%     cropping (every electrode); several, when the cropping runs: the run does not start (write the one to use). "none": no cropping
+%   - picture_organoid empty: every organoid of the photo is cropped, each as its own dataset (one recording per organoid, all from the
+%     same row of the table), with the labels of organoid_label ("56; 57; 58", given to the organoids in the order of the photo, from the
+%     top down; their number must be the number of organoids found, else the run does not start), or org1, org2... when it is empty. The
+%     labels are saved in "<file_name>_organoids.mat" with the place of each organoid on the electrode map, and given again to the same
+%     organoids at the next runs: when the photo or its settings (picture_3D_side, picture_n_organoids) change, the organoids are found
+%     again and each one takes the label of the saved organoid at its place; when the labels of the row change, they are given again in
+%     the order of the photo. Without the cropping (later stages only), the saved labels give the cropped datasets; none saved: the
+%     recording is not cropped
+%   - picture_organoid given: that organoid only, with one label (organoid_label, or org<number>)
+% cropping: =true when "SelectElectrodes" runs. notes: what was done, for the messages of the run
+
+out = recs([]);     notes = strings(0, 1);
+for i = 1:numel(recs)
+    rec = recs(i);
+    given = split_labels(rec.organoid_label);                               % labels written in the row
+    photo = isempty(rec.crop_ellipse) && strlength(rec.crop_excel) == 0 && rec.picture ~= "none";
+    if ~photo || ~isempty(rec.picture_organoid)
+        if numel(given) > 1
+            error(['Row %d of the recordings table (%s): several labels in organoid_label (%s) are given to the organoids found in the ' ...
+                'photo of the chip; with crop_ellipse, crop_excel or picture_organoid, write one label (one row per organoid)'], rec.row, ...
+                rec.file_name, rec.organoid_label);
+        end
+        if photo && isempty(given)
+            rec.organoid_label = "org" + rec.picture_organoid;
+        end
+        out(end+1) = rec; %#ok<AGROW>
+        continue
+    end
+    file_saved = fullfile(rec.folder, rec.file_name + "_organoids.mat");
+    saved = [];
+    if isfile(file_saved)
+        S = load(file_saved, 'organoids');  saved = S.organoids;
+    end
+    relabel = ~isempty(given) && ~isempty(saved) && ~same_labels(given, saved.labels);  % the labels of the row changed
+    if ~cropping                                                            % later stages: the datasets cropped before (saved labels)
+        if isempty(saved)
+            out(end+1) = rec; %#ok<AGROW>
+            continue
+        end
+        if relabel
+            error(['Row %d of the recordings table (%s): the labels in organoid_label (%s) are not those of the last cropping (%s): run the ' ...
+                'cropping again (from SelectElectrodes)'], rec.row, rec.file_name, strjoin(given, '; '), strjoin(saved.labels, '; '));
+        end
+        pic = saved.picture_path;
+    else
+        pic = rec.picture;                                                  % the photo
+        if strlength(pic) == 0
+            if ~isempty(saved) && isfile(saved.picture_path)
+                pic = saved.picture_path;
+            else
+                [p, candidates] = recording_picture(rec.folder, rec.file_name);
+                if strlength(p) > 0
+                    pic = string(fullfile(rec.folder, p));
+                elseif numel(candidates) > 1
+                    error(['Row %d of the recordings table (%s): several photos in the folder of the recording (%s): write the one to ' ...
+                        'use in the column picture (or "none": no cropping)'], rec.row, rec.file_name, strjoin(candidates, ', '));
+                end
+            end
+        end
+        if strlength(pic) == 0                                              % no photo: every electrode
+            if numel(given) > 1
+                error(['Row %d of the recordings table (%s): several labels in organoid_label (%s), but no photo of the chip in the ' ...
+                    'folder of the recording (column picture)'], rec.row, rec.file_name, rec.organoid_label);
+            end
+            out(end+1) = rec; %#ok<AGROW>
+            continue
+        end
+        [~, pname, pext] = fileparts(pic);  pic_name = string(pname) + string(pext);
+        same = ~isempty(saved) && saved.picture == pic_name && saved.picture_3D_side == rec.picture_3D_side ...
+            && saved.picture_n_organoids == rec.picture_n_organoids;
+        if ~same || relabel
+            if same                                                         % the same organoids, new labels (in the order of the photo)
+                found = struct('text_side', saved.text_side);
+                centroids = saved.centroids;    radius = saved.radius;
+            else                                                            % organoids found (again)
+                try
+                    found = OrganoidsFromPhoto(char(pic), struct('FIGURE', false, 'TEXT_SIDE', rec.picture_3D_side, ...
+                        'N_ORGANOIDS', rec.picture_n_organoids));
+                catch ME
+                    error(['Row %d of the recordings table (%s): the organoids could not be found in the photo %s (%s); give crop_ellipse, ' ...
+                        'or "none" in the column picture (no cropping)'], rec.row, rec.file_name, pic_name, ME.message);
+                end
+                centroids = reshape([found.organoids.centroid], 2, [])';
+                radius = reshape([found.organoids.radius], [], 1);
+            end
+            n = size(centroids, 1);
+            if ~isempty(given) && numel(given) ~= n
+                error(['Row %d of the recordings table (%s): %d organoid(s) found in the photo %s, but %d label(s) in organoid_label ' ...
+                    '(%s). Check the labels; if the photo shows %d organoids, write their number in picture_n_organoids (the photo was ' ...
+                    'misread)'], rec.row, rec.file_name, n, pic_name, numel(given), strjoin(given, '; '), numel(given));
+            end
+            keep_saved = saved;
+            if relabel, keep_saved = []; end                                % (new labels: in the order of the photo)
+            labels = labels_by_place(centroids, radius, keep_saved, given);
+            organoids = struct('picture', pic_name, 'picture_path', string(pic), 'picture_3D_side', rec.picture_3D_side, ...
+                'picture_n_organoids', rec.picture_n_organoids, 'text_side', found.text_side, 'labels', labels, ...
+                'numbers', (1:n)', 'centroids', centroids, 'radius', radius, 'date', string(datetime('now', 'Format', 'yyyy-MM-dd HH:mm')));
+            save(file_saved, 'organoids');
+            notes(end+1) = sprintf('%s: %d organoid(s) in the photo %s, labeled %s (saved in %s)', rec.file_name, n, pic_name, ...
+                strjoin(labels + " (number " + string((1:n)') + ")", ", "), rec.file_name + "_organoids.mat"); %#ok<AGROW>
+            saved = organoids;
+        end
+    end
+    for k = 1:numel(saved.labels)                                           % one recording per organoid
+        e = rec;
+        e.picture = string(pic);
+        e.picture_organoid = saved.numbers(k);
+        e.organoid_label = saved.labels(k);
+        e.photo_position = saved.centroids(k, :);
+        e.expanded = true;
+        out(end+1) = e; %#ok<AGROW>
+    end
+end
+
+end
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+function labels = split_labels(text)
+
+% labels written in organoid_label ("56; 57; 58", or with commas); none: empty
+
+labels = strtrim(split(string(text), [";", ","]));
+labels = labels(strlength(labels) > 0);
+labels = labels(:);
+
+end
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+function ok = same_labels(a, b)
+
+% =true if a and b hold the same labels (in any order)
+
+ok = numel(a) == numel(b) && all(ismember(a, b)) && all(ismember(b, a));
+
+end
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+function labels = labels_by_place(centroids, radius, saved, pool)
+
+% labels of the organoids found (centroids [x y], radius, in electrodes): each one takes the label of the saved organoid at its place
+% (closest pairs first, within the radius of either); the others take, in the order of the photo, the labels of pool (labels written in
+% the row) not used yet, or new labels when pool is empty (org<n>, after the largest number used)
+
+n = size(centroids, 1);     labels = strings(n, 1);     used = strings(0, 1);
+if ~isempty(saved)
+    used = saved.labels(:);
+    D = hypot(centroids(:,1) - saved.centroids(:,1)', centroids(:,2) - saved.centroids(:,2)');
+    while any(isfinite(D(:)))
+        [d, j] = min(D(:));     [a, b] = ind2sub(size(D), j);
+        if d <= max(radius(a), saved.radius(b)) && (isempty(pool) || ismember(saved.labels(b), pool))
+            labels(a) = saved.labels(b);
+        end
+        D(a, :) = inf;  D(:, b) = inf;
+    end
+end
+if ~isempty(pool)
+    free = pool(~ismember(pool, labels));
+    for a = find(labels == "")'
+        if isempty(free), break, end
+        labels(a) = free(1);    free(1) = [];
+    end
+else
+    num = str2double(regexp([used; labels(labels ~= "")], '\d+$', 'match', 'once'));
+    next = max([0; num(~isnan(num))]) + 1;
+    for a = find(labels == "")'
+        labels(a) = "org" + next;   next = next + 1;
+    end
+end
+
+end
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+function name = display_name(rec)
+
+% name of a recording in the messages (with the label of its organoid when one row of the table gives several organoids)
+
+name = rec.file_name;
+if rec.expanded
+    name = rec.file_name + " (" + rec.organoid_label + ")";
+end
 
 end
 
@@ -693,7 +892,7 @@ end
 
 recs = struct('row', {}, 'folder', {}, 'file_name', {}, 'group', {}, 'to_discard', {}, 'organoid_label', {}, 'crop_ellipse', {}, ...
     'crop_excel', {}, 'picture', {}, 'picture_organoid', {}, 'picture_3D_side', {}, 'picture_n_organoids', {}, 'file_name_3Brain', {}, ...
-    'source', {}, 'include', {});
+    'source', {}, 'include', {}, 'photo_position', {}, 'expanded', {});
 for r=1:height(T)
     if ismember(lower(cell_text(T, r, "include")), ["0", "no", "false"])
         continue                                                            % a row that is not included (not checked; see above)
@@ -719,7 +918,9 @@ for r=1:height(T)
         error("Row %d of the recordings table: crop_ellipse must have 4 numbers (x0 y0 radiusx radiusy)", r);
     end
     rec.picture = cell_text(T, r, "picture");                               % (November 2026) photo of the chip
-    if strlength(rec.picture) > 0 && ~is_absolute(char(rec.picture))
+    if lower(rec.picture) == "none"
+        rec.picture = "none";                                               % (no cropping)
+    elseif strlength(rec.picture) > 0 && ~is_absolute(char(rec.picture))
         rec.picture = string(fullfile(rec.folder, rec.picture));            % (a file in the folder of the recording)
     end
     rec.picture_organoid = numbers(cell_text(T, r, "picture_organoid"));
@@ -736,12 +937,13 @@ for r=1:height(T)
     elseif ~isscalar(rec.picture_n_organoids) || rec.picture_n_organoids < 1 || rec.picture_n_organoids ~= round(rec.picture_n_organoids)
         error("Row %d of the recordings table: picture_n_organoids must be one number (or empty: found from the photo)", r);
     end
-    if strlength(rec.picture) > 0 && ~isempty(rec.picture_organoid) && ~isfile(rec.picture)
+    if strlength(rec.picture) > 0 && rec.picture ~= "none" && ~isfile(rec.picture)
         error("Row %d of the recordings table: the picture %s does not exist", r, rec.picture);
     end
-    if has_crop(rec) && strlength(rec.organoid_label) == 0
+    if (~isempty(rec.crop_ellipse) || strlength(rec.crop_excel) > 0) && strlength(rec.organoid_label) == 0
         error("Row %d of the recordings table: the cropping needs an organoid_label", r);
     end
+    rec.photo_position = [];    rec.expanded = false;                       % (set by "assign_organoids")
     rec.file_name_3Brain = cell_text(T, r, "file_name_3Brain");
     rec.source = "Kilosort";
     if strcmpi(cell_text(T, r, "source"), "3Brain")
