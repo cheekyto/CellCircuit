@@ -38,7 +38,7 @@ option = 3;                     % =1, cropping based on electrode map in an exce
                                 % =3, cropping based on the photo of the chip, automatic ("OrganoidsFromPhoto", November 2026; default)
 
 file_excel = '';    ellipse_cropped = nan;      CROPPING_SAFETY = 1.10;     % default values (defined for all the options, so that any of them can be provided as input)
-file_photo = '';    photo_organoid = 1;     photo_text_side = "";     photo_n_organoids = 0;
+file_photo = '';    photo_organoid = 1;     photo_text_side = "";     photo_n_organoids = 0;     photo_position = [];
 switch option
     case 1                      % cropping based on electrode map in an excel file (from 3Brain software)
 
@@ -61,6 +61,8 @@ switch option
         photo_text_side = "";           % (optional) side of the photo where the "3D" text of the chip is ("right", "top", "left" or "bottom");
                                         % ="", found from the photo (pattern of the chip around the array); when given, it is checked (mismatch: warning)
         photo_n_organoids = 0;          % (optional) number of organoids on the chip (=0, found from the photo; give it when the result is wrong)
+        photo_position = [];            % (optional) [x y] place of the organoid on the electrode map: the organoid nearest to it is kept,
+                                        % instead of photo_organoid ("run_pipeline" keeps the label of each organoid this way across runs)
         CROPPING_SAFETY = 1.10;         % the electrodes within (CROPPING_SAFETY - 1) x the radius of the organoid from its outline are also kept
 end
 
@@ -222,8 +224,17 @@ switch option
         end
         [photo_crop, figs] = OrganoidsFromPhoto(file_picture, struct('TEXT_SIDE', photo_text_side, 'MARGIN', CROPPING_SAFETY - 1, ...
             'N_ORGANOIDS', photo_n_organoids, 'MATRIX_SIZE', MATRIX_SIZE, 'SHOW_ORGANOID', photo_organoid, 'UNITS', position, ...
-            'LABEL', string(organoid_label)));
+            'LABEL', string(organoid_label), 'ORGANOID_AT', photo_position));
         fprintf('Photo %s: %s; %d organoid(s)\n', file_photo, photo_crop.orientation.message, photo_crop.n_organoids);
+        if ~isempty(photo_position)                                         % (the organoid at its saved place: its number may have changed)
+            photo_organoid = photo_crop.selected;
+            fprintf('Organoid %s: number %d in the photo (%.1f electrodes from its saved place)\n', organoid_label, photo_organoid, ...
+                photo_crop.selected_distance);
+            if photo_crop.selected_distance > photo_crop.organoids(photo_organoid).radius
+                warning('SelectElectrodes:photo', ['No organoid of the photo is at the saved place of %s ([%.0f %.0f]); the nearest one (%d) ' ...
+                    'is used: check the figure'], organoid_label, photo_position(1), photo_position(2), photo_organoid);
+            end
+        end
         photo_orientation = photo_crop.orientation.message;                % how the side of the "3D" text was set (or the mismatch)
         crop = photo_crop.organoids(photo_organoid).crop;                   % crop(x, y) = true for the electrodes to keep
         on_map = all(position >= 1 & position <= MATRIX_SIZE, 2);
@@ -240,7 +251,7 @@ switch option
         crop_outline = photo_crop.organoids(photo_organoid).outline;        % outline of the organoid, [x y] in electrodes
         crop_electrodes = photo_crop.organoids(photo_organoid).electrodes;  % electrodes kept, [x y]
         ellipse_cropped = photo_crop.organoids(photo_organoid).ellipse;     % equivalent ellipse (for reference: the electrodes kept follow the outline)
-        save(file_output,'spikeTimestamp_BeforeCropping','spikeTimestamp','rec_conditions','minimum_activity','idx_abnormalActivity','good_cluster','n_discarded_HS','n_discarded_manual','file_photo','photo_organoid','photo_text_side','photo_n_organoids','photo_orientation','crop_outline','crop_electrodes','ellipse_cropped','option','n_clusterOriginal','n_discarded_QCgeneral');
+        save(file_output,'spikeTimestamp_BeforeCropping','spikeTimestamp','rec_conditions','minimum_activity','idx_abnormalActivity','good_cluster','n_discarded_HS','n_discarded_manual','file_photo','photo_organoid','photo_text_side','photo_n_organoids','photo_position','photo_orientation','crop_outline','crop_electrodes','ellipse_cropped','option','n_clusterOriginal','n_discarded_QCgeneral');
 
 end     % end of the switch  
 

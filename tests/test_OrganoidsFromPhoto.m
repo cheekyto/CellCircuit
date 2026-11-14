@@ -17,6 +17,10 @@ function passed = test_OrganoidsFromPhoto(code_dir)
 %   6. "SelectElectrodes" (option 3, its default) keeps the clusters on the electrodes kept and saves the 2 figures (electrode map, copy
 %      of the photo); the recordings table built from the folder lists the recording, not its cropped dataset, and the cropping run
 %      again from its row by "run_pipeline" with another CROPPING_SAFETY writes the cropped dataset again
+%      (November 2026) without picture and organoid: every organoid of the photo of the folder is cropped (org1, org2), the labels are
+%      saved and kept by place at the next runs, also when the photo is analyzed again; the later stages run once per saved organoid;
+%      labels written in organoid_label ("A1; B2") are given in the order of the photo and kept; a number of labels other than the
+%      number of organoids stops the run
 %
 % Example (from a terminal):
 %   matlab -batch "addpath('<repo>/tests'); test_OrganoidsFromPhoto('<repo>')"
@@ -203,6 +207,48 @@ evalc(['run_pipeline(fullfile(folder, ''recordings.xlsx''), ''stages'', "SelectE
 out2 = load(fullfile(folder, 'syn_orgA_QCmanual.mat'));
 passed = report("cropping run again (run_pipeline, CROPPING_SAFETY 1.4): the cropped dataset written again, with more electrodes", ...
     size(out2.crop_electrodes, 1) > size(out.crop_electrodes, 1) && numel(out2.spikeTimestamp_BeforeCropping) == size(xy, 1)) && passed;
+close all
+% (November 2026) no picture, no organoid_label, no picture_organoid: the photo of the folder; every organoid cropped as its own dataset
+% (org1, org2, in the order of the photo), the labels saved with their places and kept at the next runs: when the photo is analyzed again
+% (another picture_n_organoids), each organoid takes the label saved at its place (here the saved labels were swapped by hand)
+C = table(string(folder), "syn", "g1", 'VariableNames', {'folder', 'file_name', 'group'});
+writetable(C, fullfile(folder, 'auto.xlsx'));
+evalc('run_pipeline(fullfile(folder, ''auto.xlsx''), ''stages'', "SelectElectrodes", ''stop_on_error'', 1)');
+S1 = load(fullfile(folder, 'syn_organoids.mat'));
+o1 = load(fullfile(folder, 'syn_org1_QCmanual.mat'));   o2 = load(fullfile(folder, 'syn_org2_QCmanual.mat'));
+passed = report("no picture, no organoid given: every organoid of the photo of the folder cropped (org1, org2, from the top), labels saved", ...
+    isequal(S1.organoids.labels, ["org1"; "org2"]) && norm(mean(o1.crop_electrodes) - [42 44]) < 3 && norm(mean(o2.crop_electrodes) - [24 22]) < 3 ...
+    && isfile(fullfile(folder, 'syn_org2_crop_photo.png'))) && passed;
+organoids = S1.organoids;   organoids.labels = flipud(organoids.labels);     % org2 now saved at (42, 44)
+save(fullfile(folder, 'syn_organoids.mat'), 'organoids');
+C.picture_n_organoids = "2";    writetable(C, fullfile(folder, 'auto.xlsx'));
+evalc('run_pipeline(fullfile(folder, ''auto.xlsx''), ''stages'', "SelectElectrodes", ''stop_on_error'', 1)');
+S2 = load(fullfile(folder, 'syn_organoids.mat'));
+o1 = load(fullfile(folder, 'syn_org1_QCmanual.mat'));   o2 = load(fullfile(folder, 'syn_org2_QCmanual.mat'));
+passed = report("next run, the photo analyzed again (another picture_n_organoids): each organoid keeps the label saved at its place", ...
+    isequal(S2.organoids.labels, ["org2"; "org1"]) && S2.organoids.picture_n_organoids == 2 && norm(mean(o2.crop_electrodes) - [42 44]) < 3 ...
+    && norm(mean(o1.crop_electrodes) - [24 22]) < 3) && passed;
+txt = evalc('try, run_pipeline(fullfile(folder, ''auto.xlsx''), ''stages'', "IntegrateDataSets"); catch, end');
+passed = report("later stages: one recording per saved organoid, with its label", contains(txt, "syn (org1)") && contains(txt, "syn (org2)")) && passed;
+% labels written in organoid_label: given in the order of the photo, kept at the next runs (also written in another order); a number of
+% labels other than the number of organoids found stops the run
+C.organoid_label = "A1; B2";    writetable(C, fullfile(folder, 'auto.xlsx'));
+evalc('run_pipeline(fullfile(folder, ''auto.xlsx''), ''stages'', "SelectElectrodes", ''stop_on_error'', 1)');
+a1 = load(fullfile(folder, 'syn_A1_QCmanual.mat'));     b2 = load(fullfile(folder, 'syn_B2_QCmanual.mat'));
+passed = report("labels written in organoid_label (A1; B2): given in the order of the photo (A1 on top)", norm(mean(a1.crop_electrodes) - [42 44]) < 3 ...
+    && norm(mean(b2.crop_electrodes) - [24 22]) < 3) && passed;
+C.organoid_label = "B2; A1";    writetable(C, fullfile(folder, 'auto.xlsx'));
+evalc('run_pipeline(fullfile(folder, ''auto.xlsx''), ''stages'', "SelectElectrodes", ''stop_on_error'', 1)');
+a1 = load(fullfile(folder, 'syn_A1_QCmanual.mat'));
+passed = report("the same labels in another order: each organoid keeps its label", norm(mean(a1.crop_electrodes) - [42 44]) < 3) && passed;
+C.organoid_label = "A1; B2; C3";    writetable(C, fullfile(folder, 'auto.xlsx'));
+try
+    evalc('run_pipeline(fullfile(folder, ''auto.xlsx''), ''stages'', "SelectElectrodes", ''stop_on_error'', 1)');
+    stopped = false;
+catch ME
+    stopped = contains(ME.message, "2 organoid(s) found in the photo chip.png, but 3 label(s) in organoid_label");
+end
+passed = report("3 labels for 2 organoids: the run does not start (error)", stopped) && passed;
 close all
 
 end

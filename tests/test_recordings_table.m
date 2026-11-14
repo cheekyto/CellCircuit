@@ -10,9 +10,9 @@ function passed = test_recordings_table(code_dir)
 %      empty"), and the ticked row is reached (its folder is missing: the run reports it); a ticked row without a group still stops the run
 %   4. (November 2026) photo of the chip: "recording_picture" finds the photo in the folder of a recording (not the figures of the
 %      pipeline; none chosen when there are several), "make_recordings_table" fills the column picture and leaves out the datasets
-%      written by "SelectElectrodes" (not a recording whose name starts with the name of another one); a recording with a picture but
-%      no picture_organoid stops the run when "SelectElectrodes" is run (not otherwise); a wrong picture_3D_side, or a missing picture
-%      with picture_organoid, stops the run with its row
+%      written by "SelectElectrodes" (not a recording whose name starts with the name of another one); without picture, the photo of
+%      the folder is used when "SelectElectrodes" runs (a photo that is not a chip stops the run with its row; not the other stages),
+%      "none" skips the cropping, several photos stop the run; a wrong picture_3D_side, or a missing picture, stops the run with its row
 %
 % Example (from a terminal):
 %   matlab -batch "addpath('<repo>/tests'); test_recordings_table('<repo>')"
@@ -93,12 +93,20 @@ passed = report("make_recordings_table: column picture filled (one photo), pictu
     isequal(T.picture, ["chip photo.jpg"; ""; ""]) && all(T.picture_organoid == "")) && passed;
 passed = report("make_recordings_table: the datasets written by SelectElectrodes left out, not a recording with a longer name", ...
     isequal(T.file_name, ["recP"; "recQ"; "recQ_day2"])) && passed;
-P = table(string(recP), "recP", "g1", "orgA", "chip photo.jpg", "", "", 'VariableNames', ...
+P = table(string(recP), "recP", "g1", "", "", "", "", 'VariableNames', ...
     {'folder', 'file_name', 'group', 'organoid_label', 'picture', 'picture_organoid', 'picture_3D_side'});
 file = fullfile(folder, "picture.xlsx");    writetable(P, file);
-passed = report("a picture without picture_organoid stops the run of SelectElectrodes (before it starts)", ...
-    stops_with(file, "have a picture but no picture_organoid", "SelectElectrodes")) && passed;
-passed = report("... but not the other stages", reaches(file, "recP")) && passed;
+passed = report("picture empty: the photo of the folder is used for the cropping (here not a chip: the run stops with its row)", ...
+    stops_with(file, "Row 1 of the recordings table (recP): the organoids could not be found in the photo chip photo.jpg", "SelectElectrodes")) && passed;
+passed = report("... but not the other stages (no cropping)", reaches(file, "recP")) && passed;
+P.picture = "none";     writetable(P, file);
+passed = report("picture ""none"": no cropping (the stage is skipped, the run goes on)", reaches_stage(file, "SelectElectrodes", ...
+    "no cropping for this recording")) && passed;
+Q = table(string(recQ), "recQ", "g1", 'VariableNames', {'folder', 'file_name', 'group'});
+fileQ = fullfile(folder, "several.xlsx");   writetable(Q, fileQ);
+passed = report("several photos in the folder: the run of SelectElectrodes stops, with the photos", ...
+    stops_with(fileQ, "several photos in the folder of the recording (a.jpg, b.HEIC)", "SelectElectrodes")) && passed;
+P.picture = "chip photo.jpg";
 P.picture_organoid = "1";   P.picture_3D_side = "up";     writetable(P, file);
 passed = report("a wrong picture_3D_side stops the run with its row", stops_with(file, "Row 1 of the recordings table: picture_3D_side")) && passed;
 P.picture_3D_side = "top";  P.picture = "missing.jpg";    writetable(P, file);
@@ -122,6 +130,21 @@ catch ME
     if ~ok
         fprintf("        (error: %s)\n", ME.message);
     end
+end
+
+end
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+function ok = reaches_stage(table_file, stage, expected)
+
+% =true if "run_pipeline" runs the stage without stopping, and its messages contain the expected text
+
+ok = false;
+try
+    out = evalc('run_pipeline(table_file, ''stages'', stage)');
+    ok = contains(out, expected);
+catch ME
+    fprintf("        (error: %s)\n", ME.message);
 end
 
 end

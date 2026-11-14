@@ -58,6 +58,7 @@ function [result, fig] = OrganoidsFromPhoto(photo, inputs)
 %       .view               the photo around the array, turned and straightened so that its axes are the electrode coordinates:
 %                           .image (uint8 RGB), .x and .y (electrode coordinates of its columns and rows; .y grows upwards)
 %       .labels             organoid of each pixel of .view.image (0 = none)
+%       .selected           organoid chosen: SHOW_ORGANOID, or the one nearest to ORGANOID_AT (.selected_distance: its distance, electrodes)
 %   fig:            figure: the photo (whole, then around the array, with the grid of electrodes and the organoids) and the electrodes
 %                   kept for each organoid ([] when FIGURE = false). With SHOW_ORGANOID = k: 2 figures, [photo, map]: (1) a copy of the photo
 %                   with the outline of organoid k and the electrodes kept (dashed), (2) the electrode map: electrodes with active units
@@ -87,6 +88,8 @@ MIN_WIDTH = 8;                  % (November 2026) the parts of the pale regions 
 FIGURE = true;                  % =true, draw the figure
 SHOW_ORGANOID = 0;              % >0: instead, the 2 figures of the cropping of this organoid (number), as saved by "SelectElectrodes"
 UNITS = zeros(0, 2);            % (with SHOW_ORGANOID) [x y] electrodes of the active units (positionXY + 1), shown on the electrode map
+ORGANOID_AT = [];               % (optional) [x y] place on the electrode map: the organoid nearest to it is the one chosen (result.selected; shown
+                                % instead of SHOW_ORGANOID), so that an organoid keeps its label across runs ("run_pipeline", November 2026)
 LABEL = "";                     % (with SHOW_ORGANOID) name of the organoid, for the titles
 
 if nargin < 2, inputs = struct(); end
@@ -377,6 +380,13 @@ end
 result.n_organoids = n_org;
 result.organoids = organoids;
 result.labels = labels;
+result.selected = SHOW_ORGANOID;                                            % organoid chosen (SHOW_ORGANOID, or the nearest to ORGANOID_AT)
+result.selected_distance = NaN;
+if ~isempty(ORGANOID_AT)
+    d = arrayfun(@(o) norm(o.centroid - reshape(ORGANOID_AT, 1, 2)), organoids);
+    [result.selected_distance, result.selected] = min(d);
+    if SHOW_ORGANOID > 0, SHOW_ORGANOID = result.selected; end
+end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Figure
