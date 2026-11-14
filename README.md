@@ -18,6 +18,7 @@ High-density MEA chips (e.g., 3Brain, 64 × 64 = 4,096 electrodes) record the el
 4. **Finds coordinated neuronal ensembles** (cNEs), groups of units that fire together, in every condition: how often they fire, their role and order in the network bursts, and how a drug changes them (against the baseline and against the drug before it, with the two halves of the baseline as the no-drug reference).
 5. **Scores every neuron** at baseline on fixed axes: two scores from its spike waveform (Kilosort template) and one from its firing pattern outside the network bursts, so that the neurons can be related to their roles in the network bursts and compared across recordings.
 6. **Compiles** every recording of an experimental group into Excel tables, one row per recording condition, ready for statistics.
+7. **Compares groups by their neurons** (`CompareNeurons`, run by hand once the groups are compiled): it fits the axes of the scores again on all the groups you list, then, for the comparisons you choose, tests whether the groups differ in composition, whether the composition explains their activity (mixed models, with the activity measures and covariates you choose) and whether the scores relate to the roles of the neurons in the network bursts. Settings: a copy of `comparison_settings.m`.
 
 ```mermaid
 flowchart LR
@@ -155,6 +156,7 @@ Each stage can also be run by hand, as before (open it, edit its INPUTS section,
   - *Neuron scores* and *Neuron composition*: the three scores of each neuron at baseline (two from the waveform, one from the firing pattern), its waveform measures and firing-pattern features, and for each recording the number of neurons scored and their mean scores (see `NeuronScores` in [docs/FUNCTION_REFERENCE.md](docs/FUNCTION_REFERENCE.md)).
 
   `<group>_Grouped&Compiled.xlsx` has the firing, bursting and pooled network-bursting tables, with the rows grouped by treatment. The first row of every sheet gives the units.
+- **For each comparison** (`CompareNeurons`), in the folder of its settings file (or `OUTPUT`): `<NAME>_<date and time>.xlsx` and `.mat`, with the sheets *Settings*, *Axes* (the axes fitted, their stability and their agreement with the fixed axes), *Organoids* (composition, activity and covariates of each organoid), *Composition*, *Activity* and *Roles* (the models of each comparison) and *Units*; the axes in `<NAME>_<date and time>_axes.mat`.
 
 ---
 
