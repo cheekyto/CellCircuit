@@ -123,10 +123,16 @@ Only the progress is printed; the messages of each stage go to a log file next t
 === run_pipeline finished in 5.0 min: 1 recording(s), 0 error(s)
 ```
 
-**Without writing code: the CellCircuit window.** Type `CellCircuit` in MATLAB (or click CellCircuit in the Apps tab, once the install file is installed, see below). The window has three tabs:
+**Without writing code: the CellCircuit window.** Type `CellCircuit` in MATLAB (or click CellCircuit in the Apps tab, once the install file is installed, see below). The window has four tabs:
 1. **Recordings:** open a recordings table, or add the recordings found in a folder, and fill in the group of each one; tick the recordings to run ("Tick all" / "Untick all" set every row in one click). The table is saved before the run (by default in the folder whose recordings were added), and the Excel results are saved next to it.
 2. **Settings:** what to run (the whole pipeline, from a stage to the end, or some stages), which parameters (the default values, the values saved for each recording by its last run, or another file), and single values to change for this run. The values that may need adjusting for a recording (about 15, e.g., the minimum number of units of a network burst, or the threshold of the large events) are listed first, with a plain description; every other parameter is under "All parameters (advanced)". Each user can move parameters between the two lists (at most 15 common adjustments); the window keeps each user's list, and the default one is in `common_parameters.m`.
 3. **Run:** the progress of each recording and stage, the messages of the run, and buttons to open the logs and the Excel results. Stop ends the run after the stage that is running. The equivalent `run_pipeline` command is shown, to repeat the run in a script.
+4. **Visualization:** plots of a recording of the table: a raster plot (with the population firing rate below it, if wanted), the bursts of each unit, the electrode map (firing rate of each electrode), the spike waveforms (Kilosort templates), and an MP4 video of the electrode map, with the raster plot and/or the population rate above it and a cursor that moves with the video. Choose the recording and its dataset, the time window (the whole recording, a recording condition, or a window you type) and the units (all, or a list such as `1:20 35 40`): a preview of the plot, at lower resolution, follows every choice in the tab. The options of each plot are shown with it: the bin of the population firing rate (200 ms by default; spikes of all the neurons in each bin / number of neurons / bin, in Hz), the unit of the time axis (s, ms or min), and the names of the conditions (condition and dose, as the compiled tables group the recordings, e.g. "+Gabazine 20uM", or the file name). *Draw* opens the full plot in its own window; the video is saved next to the dataset and plays in PowerPoint. The map and the video show the outline of the organoid (from the cropping, or from the photo of the chip). The same plots from a script:
+
+   ```matlab
+   plotMEArecording("rec_curated_QCmanual.mat", "raster", struct('condition', "Baseline", 'units', [1:20]))
+   plotMEArecording("rec_curated_QCmanual.mat", "video", struct('window', [300 360]))   % saved as rec_curated_video_300-360s.mp4
+   ```
 
 **Install file for users without coding experience:** `tools/package_CellCircuit("2.1.0")` writes `CellCircuit_2.1.0.mltbx`, built from the last commit (uncommitted changes are left out). Double-clicking it in MATLAB installs the pipeline and adds CellCircuit to the Apps tab; installing a newer file replaces the older one. Use either the installed toolbox or this folder on the MATLAB path, not both.
 
@@ -166,6 +172,7 @@ Each stage can also be run by hand, as before (open it, edit its INPUTS section,
 CellCircuit/
 ├── run_pipeline.m            master function (recordings table → group tables)
 ├── CellCircuit.m             window to run the pipeline without code (common_parameters.m: the values shown first)
+├── plotMEArecording.m        visualization of a recording: raster plot, bursts, electrode map, waveforms, video (tab 4 of the window)
 ├── pipeline_parameters.m     every parameter of the pipeline, in one file
 ├── recordings_template.csv   example of a recordings table
 ├── <stage>.m                 the eight stages (ShapeSpikeTrainData ... Compile_MEAproject)

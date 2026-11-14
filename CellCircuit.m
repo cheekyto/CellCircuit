@@ -5,7 +5,7 @@ function out = CellCircuit(varargin)
 %   CellCircuit                         opens the window
 %   CellCircuit('table', "rec.xlsx")    opens the window with a recordings table already loaded
 %
-% Three tabs, and a bar with the buttons Run and Stop that is always visible:
+% Four tabs, and a bar with the buttons Run and Stop that is always visible:
 %   1. Recordings:  the recordings table of "run_pipeline" (one row per recording): open it, add the recordings found in a folder, edit it
 %                   (tick boxes "include", group, units to discard, ...) and save it (.xlsx or .csv)
 %   2. Settings:    what to run (the whole pipeline, from a stage to the end, or some stages), which parameters (the default file
@@ -15,6 +15,9 @@ function out = CellCircuit(varargin)
 %                   the MATLAB preferences of that user) and all the parameters (advanced), with a search
 %   3. Run:         summary of the run and the equivalent command, progress of each recording and stage (filled in during the run), the
 %                   messages of the run, and buttons to open the logs and the Excel results
+%   4. Visualization: (new, November 2026) plots of a recording of the table ("plotMEArecording"): raster plot (+ population firing rate),
+%                   bursts of each unit, electrode map, spike waveforms, and a video of the electrode map (MP4); the recording, its
+%                   dataset, the time window (whole recording, a condition, or typed), the units and the options are chosen in the tab
 % The run is the same as calling "run_pipeline" with the equivalent command shown in the tab Run. Stop: the run stops after the stage that
 % is running (a stage cannot be interrupted). The folder of npy-matlab and the last table are remembered (MATLAB preferences "CellCircuit").
 %
@@ -60,6 +63,12 @@ running = false;                    % a run is in progress
 stop_requested = false;             % the user asked to stop
 close_after_run = false;            % the window closes at the end of the run
 run_info = struct('recordings', strings(0), 'groups', strings(0), 'stages', strings(0), 'project', "", 'excel', strings(0));
+viz_data = [];                      % (new, November 2026) dataset read in the tab Visualization (output "data" of "plotMEArecording")
+viz_photo = struct('photo', "", 'side', "", 'n', 0);  % photo of the chip of the recording chosen (columns picture, picture_3D_side,
+                                    % picture_n_organoids of its row), for the outline of the organoids
+viz_last = "";                      % last file saved by the tab Visualization (figure or video)
+viz_hold = false;                   % (November 2026) no preview while a dataset is read (one preview at the end)
+viz_seen_row = [];                  % row selected in tab 1 at the last visit of the tab Visualization (a new selection is proposed there)
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Window
@@ -70,6 +79,7 @@ tabs = uitabgroup(main);
 tab_rec = uitab(tabs, 'Title', '1. Recordings');
 tab_set = uitab(tabs, 'Title', '2. Settings');
 tab_run = uitab(tabs, 'Title', '3. Run');
+tab_viz = uitab(tabs, 'Title', '4. Visualization');
 
 % bar at the bottom (always visible)
 bar = uigridlayout(main, [1 5], 'ColumnWidth', {'1x', 90, 120, 90, 70}, 'Padding', [0 0 0 0]);
@@ -85,16 +95,11 @@ stop_button = uibutton(bar, 'Text', 'Stop', 'Enable', 'off', 'ButtonPushedFcn', 
 %% Tab 1: recordings
 
 g1 = uigridlayout(tab_rec, [5 1], 'RowHeight', {'fit', 'fit', 'fit', '1x', 'fit'});
-uilabel(g1, 'WordWrap', 'on', 'Text', ['One row per recording, each in its own folder. Tick "include" to run it. "group": the recordings of the ' ...
-    'same group are compiled together in one Excel file. "file_name": the common name of the files of the recording (for a new Kilosort ' ...
-    'recording, the name you choose for its files). Optional: "to_discard", units to discard by hand (e.g., 3 17 25); "source", Kilosort or ' ...
-    '3Brain; "picture", the photo of the chip, to keep only the electrodes under each organoid (empty: the photo in the folder of the ' ...
-    'recording; "none": no cropping): every organoid of the photo is cropped as its own dataset, with the labels of "organoid_label" ' ...
-    '(e.g., 56; 57; 58: as many labels as organoids; empty: org1, org2...), saved and kept at the next runs; or only the one given by ' ...
-    '"picture_organoid" (its number in the photo, with one label) (optional: ' ...
-    '"picture_3D_side", side of the photo where the "3D" text is, and "picture_n_organoids"; "crop_ellipse" or "crop_excel", with ' ...
-    '"organoid_label", are used instead of the photo); ' ...
-    '"file_name_3Brain", a 3Brain dataset to combine with the Kilosort one.']);
+% (revised, user's request, November 2026: shorter; the details of the cropping columns are in the Help)
+uilabel(g1, 'WordWrap', 'on', 'Text', ['One row per recording; tick "include" to run it. "group": recordings compiled together in one Excel ' ...
+    'file. "file_name": common name of the files of the recording. Optional: "to_discard" (units to remove by hand, e.g., 3 17 25), ' ...
+    '"source" (Kilosort or 3Brain), "file_name_3Brain" (a 3Brain dataset to combine), and the cropping columns ("picture", ' ...
+    '"organoid_label"...: keep only the electrodes under each organoid; see Help).']);
 b1 = uigridlayout(g1, [1 9], 'ColumnWidth', {105, 170, 105, 115, 90, 160, 60, 75, '1x'}, 'Padding', [0 0 0 0]);
 uibutton(b1, 'Text', 'Open table...', 'ButtonPushedFcn', guard(@on_open_table), 'Tooltip', 'Open a recordings table (.xlsx or .csv)');
 uibutton(b1, 'Text', 'Add recordings from folder...', 'ButtonPushedFcn', guard(@on_add_folder), ...
@@ -223,6 +228,118 @@ uibutton(gr, 'Text', 'Open the results folder', 'ButtonPushedFcn', guard(@on_ope
 uibutton(gr, 'Text', 'Open the Excel results', 'ButtonPushedFcn', guard(@on_open_excel));
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Tab 4: visualization (new, November 2026; see "plotMEArecording")
+% (revised, user's choices, 14 November 2026) a preview of the plot instead of the equivalent command; the options under the units
+
+g4 = uigridlayout(tab_viz, [1 2], 'ColumnWidth', {440, '1x'});
+left4 = uigridlayout(g4, [5 1], 'RowHeight', {'fit', 'fit', 'fit', 'fit', 'fit'}, 'Padding', [0 0 0 0], 'Scrollable', 'on');
+right4 = uigridlayout(g4, [3 1], 'RowHeight', {'1x', 'fit', 40}, 'Padding', [0 0 0 0]);   % (preview, result, buttons)
+
+% recording and dataset
+p_vrec = uipanel(left4, 'Title', 'Recording');
+gv1 = uigridlayout(p_vrec, [4 2], 'RowHeight', {22, 18, 22, 'fit'}, 'ColumnWidth', {'1x', 95});
+viz_rec = uidropdown(gv1, 'Items', {'(open or build a recordings table in tab 1)'}, 'ItemsData', {0}, ...
+    'ValueChangedFcn', guard(@(~,~) viz_choose_recording()), 'Tooltip', 'A recording of the table of tab 1');
+uibutton(gv1, 'Text', 'Refresh', 'ButtonPushedFcn', guard(@(~,~) viz_fill_recordings()), 'Tooltip', 'Read the recordings table of tab 1 again');
+viz_dataset_label = uilabel(gv1, 'Text', 'Dataset (file of the pipeline, after the quality control):');
+viz_dataset_label.Layout.Column = [1 2];
+viz_dataset = uidropdown(gv1, 'Items', {'(choose a recording)'}, 'ItemsData', {''}, 'ValueChangedFcn', guard(@(src,~) viz_load(src.Value)), ...
+    'Tooltip', 'The analyzed dataset (_curated or _integrated) is chosen first; the cropped datasets have the label of their organoid');
+uibutton(gv1, 'Text', 'Other file...', 'ButtonPushedFcn', guard(@on_viz_file), 'Tooltip', 'Choose the "_QCmanual.mat" file of any recording');
+viz_info = uilabel(gv1, 'WordWrap', 'on', 'Text', 'No dataset read yet.', 'FontColor', [0.3 0.3 0.3]);
+viz_info.Layout.Column = [1 2];
+
+% what to draw
+p_vwhat = uipanel(left4, 'Title', 'What to draw');
+gv2 = uigridlayout(p_vwhat, [2 1], 'RowHeight', {22, 'fit'});
+viz_type = uidropdown(gv2, 'Items', {'Raster plot', 'Bursts of each unit (raster plot)', 'Electrode map (firing rate)', ...
+    'Spike waveforms (Kilosort templates)', 'Video of the electrode map (MP4)'}, 'ItemsData', {'raster', 'bursts', 'map', 'waveforms', 'video'}, ...
+    'ValueChangedFcn', guard(@(~,~) viz_update_view()));
+viz_help = uilabel(gv2, 'WordWrap', 'on', 'FontColor', [0.4 0.4 0.4], 'Text', '');
+
+% time window
+p_vtime = uipanel(left4, 'Title', 'Time window');
+gv3 = uigridlayout(p_vtime, [2 4], 'RowHeight', {22, 22}, 'ColumnWidth', {65, '1x', 50, '1x'});
+viz_time = uidropdown(gv3, 'Items', {'Whole recording'}, 'ItemsData', {0}, 'ValueChangedFcn', guard(@(~,~) viz_time_choice()), ...
+    'Tooltip', 'The whole recording, one recording condition, or a window typed below (Custom)');
+viz_time.Layout.Column = [1 4];
+uilabel(gv3, 'Text', 'From (s):');
+viz_from = uieditfield(gv3, 'numeric', 'ValueChangedFcn', guard(@(~,~) viz_custom_time()));
+uilabel(gv3, 'Text', 'to (s):', 'HorizontalAlignment', 'right');
+viz_to = uieditfield(gv3, 'numeric', 'ValueChangedFcn', guard(@(~,~) viz_custom_time()));
+
+% units
+p_vunits = uipanel(left4, 'Title', 'Units');
+gv4 = uigridlayout(p_vunits, [1 2], 'RowHeight', {22}, 'ColumnWidth', {130, '1x'});
+viz_units_mode = uidropdown(gv4, 'Items', {'All units', 'Only these units:'}, 'ItemsData', {'all', 'list'}, ...
+    'ValueChangedFcn', guard(@(~,~) viz_update_view()));
+viz_units = uieditfield(gv4, 'text', 'Placeholder', 'unit numbers, e.g., 1:20 35 40', 'ValueChangedFcn', guard(@(~,~) viz_units_typed()), ...
+    'Tooltip', 'The numbers of the units, as in the raster plot (rows): single numbers and ranges such as 1:20, separated by spaces or commas');
+
+% options (only the ones of the plot chosen are shown, see "viz_update_view")
+p_vopt = uipanel(left4, 'Title', 'Options');
+gv5 = uigridlayout(p_vopt, [14 2], 'ColumnWidth', {'1x', 150}, 'RowSpacing', 6);
+viz_pop = uicheckbox(gv5, 'Text', 'Population firing rate', 'Value', true, 'ValueChangedFcn', guard(@(~,~) viz_update_view()), ...
+    'Tooltip', 'Spikes of all the neurons drawn in each bin / number of neurons / bin (Hz per neuron), in bins of the length given below');
+viz_pop.Layout.Column = [1 2];
+viz_bin_label = uilabel(gv5, 'Text', 'Bin of the population firing rate (ms):');
+viz_bin = uieditfield(gv5, 'numeric', 'Value', 200, 'Limits', [1 600000], 'ValueChangedFcn', guard(@(~,~) viz_update_view()), ...
+    'Tooltip', 'Length of the bins of the population firing rate, in ms (default: 200 ms)');
+viz_raster = uicheckbox(gv5, 'Text', 'Raster plot above the map (with a cursor that moves with the video)', 'Value', true, ...
+    'ValueChangedFcn', guard(@(~,~) viz_update_view()));
+viz_raster.Layout.Column = [1 2];
+viz_cond = uicheckbox(gv5, 'Text', 'Start and name of each recording condition', 'Value', true, 'ValueChangedFcn', guard(@(~,~) viz_update_view()));
+viz_cond.Layout.Column = [1 2];
+viz_names_label = uilabel(gv5, 'Text', 'Names of the conditions:');
+viz_names = uidropdown(gv5, 'Items', {'Condition and dose', 'File name'}, 'ItemsData', {'treatment', 'file'}, ...
+    'ValueChangedFcn', guard(@(~,~) viz_names_changed()), 'Tooltip', ['Condition and dose: as the compiled tables group the recordings ' ...
+    '(e.g., +Gabazine 20uM). File name: the part of the file name of the condition (e.g., gabazine_20uM)']);
+viz_tunit_label = uilabel(gv5, 'Text', 'Time axis in:');
+viz_tunit = uidropdown(gv5, 'Items', {'seconds (s)', 'milliseconds (ms)', 'minutes (min)'}, 'ItemsData', {'s', 'ms', 'min'}, ...
+    'ValueChangedFcn', guard(@(~,~) viz_update_view()), 'Tooltip', 'Unit of the time axis (the window above is always in seconds)');
+viz_measure_label = uilabel(gv5, 'Text', 'Rate of each unit:');
+viz_measure = uidropdown(gv5, 'Items', {'Mean rate', '1 / median interval', '1 / 10% interval (bursts)'}, 'ItemsData', {'mean', 'median', 'fast'}, ...
+    'ValueChangedFcn', guard(@(~,~) viz_update_view()), 'Tooltip', ['Mean rate: spikes / length of the window. 1 / median interval: rate ' ...
+    'of the usual firing. 1 / 10% interval: rate inside the bursts (10th percentile of the intervals between spikes)']);
+viz_limit_label = uilabel(gv5, 'Text', 'Top of the color scale (Hz; empty = automatic):');
+viz_limit = uieditfield(gv5, 'text', 'Placeholder', 'automatic', 'ValueChangedFcn', guard(@(~,~) viz_update_view()), ...
+    'Tooltip', 'Automatic: the 99th percentile of the rates of the electrodes with units');
+viz_cmap_label = uilabel(gv5, 'Text', 'Colors of the map:');            % (user's request, November 2026)
+viz_cmap = uidropdown(gv5, 'Items', {'Jet (blue to red)', 'Turbo (blue to red, smoother)', 'Parula (blue to yellow)', 'Hot (black to white)', ...
+    'Gray (black to white)'}, 'ItemsData', {'jet', 'turbo', 'parula', 'hot', 'gray'}, 'ValueChangedFcn', guard(@(~,~) viz_update_view()), ...
+    'Tooltip', 'Color palette of the firing rate on the electrode map and in the video');
+viz_empty_label = uilabel(gv5, 'Text', 'Electrodes without neurons:');   % (user's request, November 2026)
+viz_empty = uidropdown(gv5, 'Items', {'Black', 'White'}, 'ItemsData', {'black', 'white'}, 'ValueChangedFcn', guard(@(~,~) viz_update_view()), ...
+    'Tooltip', 'Color of the electrodes without neurons on the map and in the video (the outline of the organoid is drawn in the other color)');
+viz_outline = uicheckbox(gv5, 'Text', 'Outline of the organoid (from the cropping, or the photo of the chip)', 'Value', true, ...
+    'ValueChangedFcn', guard(@(~,~) viz_update_view()));
+viz_outline.Layout.Column = [1 2];
+viz_step_label = uilabel(gv5, 'Text', 'Step of the video (s; one frame per step):');
+viz_step = uieditfield(gv5, 'numeric', 'Value', 0.4, 'Limits', [0.01 60], 'ValueChangedFcn', guard(@(~,~) viz_update_view()));
+viz_speed_label = uilabel(gv5, 'Text', 'Speed (times the real time):');
+viz_speed = uieditfield(gv5, 'numeric', 'Value', 4, 'Limits', [0.01 1000], 'ValueChangedFcn', guard(@(~,~) viz_update_view()));
+viz_save = uicheckbox(gv5, 'Text', 'Also save the figure (PNG) next to the dataset', 'Value', false, 'ValueChangedFcn', guard(@(~,~) viz_update_view()));
+viz_save.Layout.Column = [1 2];
+
+% preview, result and (user's request) the buttons Draw / Open below them
+p_vprev = uipanel(right4, 'Title', 'Preview (lower resolution; Draw opens the full plot)');
+p_vprev.Layout.Row = 1;
+gv8 = uigridlayout(p_vprev, [2 1], 'RowHeight', {'fit', '1x'}, 'Padding', [4 4 4 4]);
+viz_preview_label = uilabel(gv8, 'WordWrap', 'on', 'FontColor', [0.4 0.4 0.4], 'Text', 'The preview appears here once a dataset is read.');
+viz_preview_box = uipanel(gv8, 'BorderType', 'none', 'BackgroundColor', [1 1 1]);
+viz_result = uilabel(right4, 'WordWrap', 'on', 'Text', 'Choose a recording, what to draw, the time window and the units, then press Draw.');
+viz_result.Layout.Row = 2;
+gv6 = uigridlayout(right4, [1 3], 'ColumnWidth', {'1x', 140, 115}, 'Padding', [0 0 0 0]);
+gv6.Layout.Row = 3;
+viz_draw_button = uibutton(gv6, 'Text', 'Draw', 'FontWeight', 'bold', 'FontSize', 14, 'BackgroundColor', [0.30 0.65 0.35], ...
+    'FontColor', [1 1 1], 'ButtonPushedFcn', guard(@on_viz_draw), 'Tooltip', 'Draw the plot in its own window, full size (or make the video)');
+viz_open_button = uibutton(gv6, 'Text', 'Open the saved file', 'Enable', 'off', 'ButtonPushedFcn', guard(@(~,~) viz_open(false)), ...
+    'Tooltip', ['Opens the last file saved: a video, or a figure drawn with "Also save the figure (PNG)" ticked (available once one ' ...
+    'is saved)']);
+viz_folder_button = uibutton(gv6, 'Text', 'Open its folder', 'Enable', 'off', 'ButtonPushedFcn', guard(@(~,~) viz_open(true)), ...
+    'Tooltip', 'Opens the folder of the last file saved (the folder of the dataset; available once a file is saved)');
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Start
 
 load_param_list(default_param_file);
@@ -236,12 +353,21 @@ else
     end
 end
 update_summary();
+tabs.SelectionChangedFcn = guard(@on_tab_change);
+viz_update_view();
 fig.UserData.test = struct('open_table', @open_table, 'add_folder', @add_folder, 'start_folder', @start_folder, 'set_change', @set_change, 'run', @on_run, ...
     'add_to_common', @add_to_common, 'set_change_common', @set_change_common, 'remove_from_common', @remove_from_common, 'default_list', @on_default_list, 'common', @get_common, ...
     'stop', @on_stop, 'check', @check_settings, 'command', @command_text, 'save_param_file', @save_param_file, ...
+    'viz_fill', @viz_fill_recordings, 'viz_load', @viz_load, 'viz_draw', @on_viz_draw, 'viz_inputs', @viz_inputs, 'viz_data', @get_viz_data, ...
     'controls', struct('group', group_field, 'what_mode', what_mode, 'from_stage', from_stage, 'only_checks', only_checks, 'param_mode', param_mode, ...
     'param_file', param_file_field, 'renew', renew_list, 'npy', npy_field, 'project', project_field, 'rec_table', rec_table, ...
-    'progress', progress_table, 'log', log_area, 'status', status_label, 'param_table', param_table, 'stop_error', stop_error_box));
+    'progress', progress_table, 'log', log_area, 'status', status_label, 'param_table', param_table, 'stop_error', stop_error_box, ...
+    'tabs', tabs, 'tab_viz', tab_viz, 'viz_rec', viz_rec, 'viz_dataset', viz_dataset, 'viz_type', viz_type, 'viz_time', viz_time, ...
+    'viz_from', viz_from, 'viz_to', viz_to, 'viz_units_mode', viz_units_mode, 'viz_units', viz_units, 'viz_pop', viz_pop, ...
+    'viz_raster', viz_raster, 'viz_cond', viz_cond, 'viz_measure', viz_measure, 'viz_limit', viz_limit, 'viz_outline', viz_outline, ...
+    'viz_step', viz_step, 'viz_speed', viz_speed, 'viz_save', viz_save, 'viz_info', viz_info, 'viz_result', viz_result, ...
+    'viz_draw', viz_draw_button, 'viz_options', gv5, 'viz_bin', viz_bin, 'viz_tunit', viz_tunit, 'viz_names', viz_names, ...
+    'viz_preview', viz_preview_box, 'viz_preview_label', viz_preview_label, 'viz_cmap', viz_cmap, 'viz_empty', viz_empty));
 if nargout > 0                                                              % (the window is returned only when asked: "fig" itself must stay,
     out = fig;                                                              %  the functions of the window use it)
 end
@@ -1329,6 +1455,7 @@ end
         tick_all_button.Enable = ~on;
         untick_all_button.Enable = ~on;
         param_table.ColumnEditable = [false false ~on false false];
+        viz_draw_button.Enable = ~on;                                       % (each stage closes the figures: no plot during a run)
         for c = [what_mode, from_stage, only_checks, param_mode, renew_list]
             c.Enable = ~on;
         end
@@ -1402,6 +1529,468 @@ end
     end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%   VISUALIZATION   %%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% (new, November 2026) tab 4: plots of a recording with "plotMEArecording"
+
+    function on_tab_change(~, ev)
+        % the list of recordings of the tab Visualization follows the table of tab 1
+        if ev.NewValue == tab_viz
+            viz_fill_recordings();
+        end
+    end
+
+    function viz_fill_recordings()
+        % the recordings of the table (rows with a folder and a file name); the one chosen is kept, or the row selected in tab 1 is proposed
+        T = rec_table.Data;
+        rows = find(strlength(strtrim(T.folder)) > 0 & strlength(strtrim(T.file_name)) > 0)';
+        old = viz_rec.Value;
+        old_key = "";
+        if ~isequal(old, 0) && numel(viz_rec.ItemsData) >= 1 && isfield(viz_rec.UserData, 'keys')
+            old_key = viz_rec.UserData.keys(viz_rec.ItemsData == old);
+        end
+        if isempty(rows)
+            viz_rec.Items = {'(open or build a recordings table in tab 1)'};
+            viz_rec.ItemsData = 0;
+            viz_rec.UserData = struct('keys', "");
+            viz_choose_recording();
+            return
+        end
+        keys = row_key(T, rows);
+        items = string(rows(:)) + ". " + strtrim(T.file_name(rows(:)));
+        label = strtrim(T.organoid_label(rows(:)));
+        items(strlength(label) > 0) = items(strlength(label) > 0) + "  (organoid " + label(strlength(label) > 0) + ")";
+        viz_rec.Items = cellstr(items);
+        viz_rec.ItemsData = rows;
+        viz_rec.UserData = struct('keys', keys);
+        sel = selected_table_rows();
+        if ~isempty(sel) && ismember(sel(1), rows) && ~isequal(sel(1), viz_seen_row)   % (a row selected in tab 1 since the last visit)
+            choice = sel(1);
+        elseif any(keys == old_key)
+            choice = rows(find(keys == old_key, 1));
+        else
+            choice = rows(1);
+        end
+        viz_seen_row = [];
+        if ~isempty(sel), viz_seen_row = sel(1); end
+        viz_rec.Value = choice;
+        if ~(any(keys == old_key) && keys(rows == choice) == old_key) || isempty(viz_data)
+            viz_choose_recording();
+        end
+    end
+
+    function viz_choose_recording()
+        % datasets of the recording chosen (the analyzed one first), and the photo of its chip (for the outline of the organoids)
+        r = viz_rec.Value;
+        T = rec_table.Data;
+        viz_data = [];
+        viz_photo = struct('photo', "", 'side', "", 'n', 0);
+        if isequal(r, 0) || r > height(T)
+            viz_dataset.Items = {'(choose a recording)'};     viz_dataset.ItemsData = {''};
+            viz_info.Text = 'No dataset read yet.';
+            viz_fill_times();       viz_update_view();
+            return
+        end
+        folder = row_folder(r);
+        name = strtrim(T.file_name(r));
+        [files, labels] = dataset_files(folder, name, strtrim(T.organoid_label(r)));
+        n = str2double(T.picture_n_organoids(r));
+        if isnan(n), n = 0; end
+        viz_photo = struct('photo', strtrim(T.picture(r)), 'side', lower(strtrim(T.picture_3D_side(r))), 'n', n);
+        if isempty(files)
+            viz_dataset.Items = {'(no dataset yet: run the pipeline up to the quality control)'};     viz_dataset.ItemsData = {''};
+            viz_info.Text = sprintf('No file %s..._QCmanual.mat in %s.', name, folder);
+            viz_fill_times();       viz_update_view();
+            return
+        end
+        viz_dataset.Items = cellstr(labels);
+        viz_dataset.ItemsData = cellstr(files);
+        viz_dataset.Value = char(files(1));
+        viz_load(files(1));
+    end
+
+    function viz_load(file)
+        % reads a dataset once ("data" of "plotMEArecording"): units, conditions, outline of the cropping; then the preview
+        file = string(file);
+        if strlength(file) == 0
+            return
+        end
+        set_status(sprintf('Reading %s...', file));     drawnow;
+        viz_hold = true;                                                    % (one preview, at the end)
+        restore = onCleanup(@() viz_release());
+        [~, viz_data] = plotMEArecording(file, "data");
+        viz_fill_times();
+        viz_info_text();
+        clear restore
+        viz_update_view();
+        set_status(sprintf('Dataset read: %d units, %d recording conditions. Check the preview, then press Draw.', viz_data.n_units, ...
+            numel(viz_data.conditions)));
+    end
+
+    function viz_release()
+        viz_hold = false;
+    end
+
+    function D = get_viz_data()
+        D = viz_data;                                                       % (for the tests)
+    end
+
+    function on_viz_file(~, ~)
+        [f, p] = with_dialog(@() uigetfile({'*_QCmanual.mat', 'Dataset of the pipeline (*_QCmanual.mat)'}, 'Choose a dataset', ...
+            char(start_folder())));
+        if isequal(f, 0)
+            return
+        end
+        file = string(fullfile(p, f));
+        viz_photo = struct('photo', "", 'side', "", 'n', 0);               % (the photo is searched in the folder of the file)
+        if any(strcmp(viz_dataset.ItemsData, ''))
+            viz_dataset.Items = {f};    viz_dataset.ItemsData = {char(file)};
+        elseif ~any(strcmp(viz_dataset.ItemsData, char(file)))
+            viz_dataset.Items = [viz_dataset.Items, {f}];   viz_dataset.ItemsData = [viz_dataset.ItemsData, {char(file)}];
+        end
+        viz_dataset.Value = char(file);
+        viz_load(file);
+    end
+
+    function names = viz_cond_names()
+        % names of the recording conditions, as chosen (condition and dose, or file name)
+        names = strings(1, 0);
+        if ~isempty(viz_data)
+            [~, Dn] = plotMEArecording(viz_data, "data", struct('condition_names', string(viz_names.Value)));
+            names = [Dn.conditions.name];
+        end
+    end
+
+    function viz_info_text()
+        % (revised, user's choice: without the outline of the organoid) units and conditions of the dataset
+        D = viz_data;
+        names = viz_cond_names();
+        cond = strings(1, numel(D.conditions));
+        for c=1:numel(D.conditions)
+            cond(c) = sprintf('%s (%g-%g s)', names(c), D.conditions(c).start, D.conditions(c).stop);
+        end
+        viz_info.Text = sprintf('%d units. Conditions: %s.', D.n_units, strjoin(cond, ', '));
+    end
+
+    function viz_names_changed()
+        viz_hold = true;
+        restore = onCleanup(@() viz_release());
+        viz_fill_times();
+        if ~isempty(viz_data)
+            viz_info_text();
+        end
+        clear restore
+        viz_update_view();
+    end
+
+    function viz_fill_times()
+        % the whole recording, each recording condition, or a window typed (Custom)
+        if isempty(viz_data)
+            viz_time.Items = {'Whole recording'};      viz_time.ItemsData = 0;      viz_time.Value = 0;
+            viz_from.Value = 0;     viz_to.Value = 0;
+            return
+        end
+        D = viz_data;
+        names = viz_cond_names();
+        old = viz_time.Value;
+        items = sprintf("Whole recording (%g-%g s)", D.t_range(1), D.t_range(2));
+        for c=1:numel(D.conditions)
+            items(end+1) = sprintf("%s (%g-%g s)", names(c), D.conditions(c).start, D.conditions(c).stop); %#ok<AGROW>
+        end
+        items(end+1) = "Custom window (type it below)";
+        viz_time.Items = cellstr(items);
+        viz_time.ItemsData = [0, 1:numel(D.conditions), -1];
+        if old == -1 && viz_to.Value > viz_from.Value && viz_from.Value < D.t_range(2) && viz_to.Value > D.t_range(1)
+            viz_time.Value = -1;                                            % (the window typed is kept)
+        elseif old > 0 && old <= numel(D.conditions)
+            viz_time.Value = old;
+        else
+            viz_time.Value = 0;
+        end
+        viz_time_choice();
+    end
+
+    function viz_time_choice()
+        % the fields From / to show the window chosen
+        if isempty(viz_data)
+            return
+        end
+        v = viz_time.Value;
+        if v == 0
+            viz_from.Value = viz_data.t_range(1);     viz_to.Value = viz_data.t_range(2);
+        elseif v > 0
+            viz_from.Value = viz_data.conditions(v).start;     viz_to.Value = viz_data.conditions(v).stop;
+        end
+        viz_update_view();
+    end
+
+    function viz_custom_time()
+        if ~isempty(viz_data)
+            viz_time.Value = -1;
+        end
+        viz_update_view();
+    end
+
+    function viz_units_typed()
+        if strlength(strtrim(string(viz_units.Value))) > 0
+            viz_units_mode.Value = 'list';
+        end
+        viz_update_view();
+    end
+
+    function in = viz_inputs()
+        % choices of the tab, as the inputs of "plotMEArecording" (only the ones of the plot chosen)
+        type = viz_type.Value;
+        in = struct();
+        if strcmp(viz_units_mode.Value, 'list')
+            in.units = parse_units(viz_units.Value);
+        end
+        v = viz_time.Value;
+        if ~strcmp(type, 'waveforms') && ~isempty(viz_data)
+            if v > 0
+                in.condition = v;
+            elseif v < 0
+                if viz_to.Value <= viz_from.Value
+                    error('The end of the time window (%g s) must be after its start (%g s)', viz_to.Value, viz_from.Value);
+                end
+                in.window = [viz_from.Value viz_to.Value];
+            end
+        end
+        lim = strtrim(string(viz_limit.Value));
+        if strlength(lim) > 0 && ismember(type, {'map', 'video'})
+            x = str2double(lim);
+            if ~(x > 0)
+                error('The top of the color scale must be a rate above 0 (Hz), or empty for automatic (not "%s")', lim);
+            end
+        end
+        if ismember(type, {'raster', 'bursts', 'video'})
+            in.condition_lines = viz_cond.Value;
+            in.condition_names = string(viz_names.Value);
+            in.time_unit = string(viz_tunit.Value);
+        end
+        switch type
+            case 'raster'
+                in.population_rate = viz_pop.Value;
+                in.rate_bin = viz_bin.Value/1000;                           % (typed in ms)
+            case 'map'
+                in.rate_measure = string(viz_measure.Value);
+            case 'video'
+                in.raster = viz_raster.Value;
+                in.population_rate = viz_pop.Value;
+                in.rate_bin = viz_bin.Value/1000;
+                in.VIDEO_STEP = viz_step.Value;
+                in.VIDEO_SPEED = viz_speed.Value;
+        end
+        if ismember(type, {'map', 'video'})
+            if strlength(lim) > 0
+                in.color_limit = str2double(lim);
+            end
+            if ~strcmp(viz_cmap.Value, 'jet')
+                in.MAP_COLORMAP = string(viz_cmap.Value);
+            end
+            if ~strcmp(viz_empty.Value, 'black')
+                in.empty_color = string(viz_empty.Value);
+            end
+            in.outline = viz_outline.Value;
+            if viz_outline.Value                                            % (photo of the row of the table, if given)
+                if strlength(viz_photo.photo) > 0, in.photo = viz_photo.photo; end
+                if strlength(viz_photo.side) > 0, in.photo_text_side = viz_photo.side; end
+                if viz_photo.n > 0, in.photo_n_organoids = viz_photo.n; end
+            end
+        end
+        if viz_save.Value && ~strcmp(type, 'video')
+            in.output = "auto";
+        end
+    end
+
+    function viz_update_view()
+        % shows the options of the plot chosen (the other rows have no height) and its help, then updates the preview
+        type = viz_type.Value;
+        is = @(varargin) any(strcmp(type, varargin));
+        show = [is('raster', 'video'), is('raster', 'video') && viz_pop.Value, is('video'), is('raster', 'bursts', 'video'), ...
+            is('raster', 'bursts', 'video'), is('raster', 'bursts', 'video'), is('map'), is('map', 'video'), is('map', 'video'), ...
+            is('map', 'video'), is('map', 'video'), is('video'), is('video'), ~is('video')];
+        gv5.RowHeight = num2cell(22*show);
+        controls = {viz_pop, [viz_bin_label viz_bin], viz_raster, viz_cond, [viz_names_label viz_names], [viz_tunit_label viz_tunit], ...
+            [viz_measure_label viz_measure], [viz_limit_label viz_limit], [viz_cmap_label viz_cmap], [viz_empty_label viz_empty], viz_outline, [viz_step_label viz_step], ...
+            [viz_speed_label viz_speed], viz_save};
+        for k=1:numel(controls)
+            set(controls{k}, 'Visible', show(k));
+        end
+        viz_pop.Text = ifelse(is('video'), 'Population firing rate above the map', 'Population firing rate (below the raster plot)');
+        left4.RowHeight = {'fit', 'fit', ifelse(is('waveforms'), 0, 'fit'), 'fit', 'fit'};
+        p_vtime.Visible = ~is('waveforms');
+        viz_units.Enable = strcmp(viz_units_mode.Value, 'list');
+        viz_draw_button.Text = ifelse(is('video'), 'Make the video', 'Draw');
+        switch type
+            case 'raster'
+                viz_help.Text = 'One row per neuron, one tick per spike; dashed lines: start of each condition. Below: the population firing rate.';
+            case 'bursts'
+                viz_help.Text = 'The bursts of each neuron in color, with their first and last spike, peak and middle marked (at most 100 neurons).';
+            case 'map'
+                viz_help.Text = 'Each electrode colored by the firing rate of its neurons in the window; black: no neuron; dashed: outline of the organoid.';
+            case 'waveforms'
+                viz_help.Text = 'The Kilosort template of each neuron on its peak electrode (at most 36 neurons; the time window is not used).';
+            case 'video'
+                viz_help.Text = ['MP4 of the electrode map, one frame per step, with the raster plot and/or the population rate above it ' ...
+                    'and a cursor that moves with the video; saved next to the dataset (it plays in PowerPoint).'];
+        end
+        viz_preview();
+    end
+
+    function viz_preview()
+        % (user's request, November 2026) quick preview of the plot chosen, in the tab, to check the time window and the units:
+        % "plotMEArecording" draws it in the panel of the preview (raster plots as images, the first frame of a video); Draw opens it full size
+        if viz_hold || ~isvalid(fig)
+            return
+        end
+        delete(viz_preview_box.Children);
+        viz_preview_label.FontColor = [0.4 0.4 0.4];
+        if isempty(viz_data)
+            viz_preview_label.Text = 'The preview appears here once a dataset is read.';
+            return
+        end
+        try
+            in = viz_inputs();
+        catch ME
+            viz_preview_label.Text = ['Not drawn: ' ME.message];
+            viz_preview_label.FontColor = [0.8 0 0];
+            return
+        end
+        type = string(viz_type.Value);
+        viz_find_outline(in);
+        in.parent = viz_preview_box;
+        in.preview = true;
+        if isfield(in, 'output'), in = rmfield(in, 'output'); end
+        try
+            [~, res] = plotMEArecording(viz_data, type, in);
+        catch ME
+            delete(viz_preview_box.Children);
+            viz_preview_label.Text = ['Not drawn: ' regexprep(ME.message, '^plotMEArecording: ', '')];
+            viz_preview_label.FontColor = [0.8 0 0];
+            return
+        end
+        switch type
+            case "waveforms"
+                viz_preview_label.Text = sprintf('%d neurons', numel(res.units));
+            case "video"
+                viz_preview_label.Text = sprintf('First frame of the video: %d frames, %g-%g s (%.1f s of video)', res.n_frames, ...
+                    res.window(1), res.window(2), res.n_frames/res.frame_rate);
+            otherwise
+                viz_preview_label.Text = sprintf('%d neurons, %g-%g s', numel(res.units), res.window(1), res.window(2));
+        end
+    end
+
+    function viz_find_outline(in)
+        % the organoids of the photo of the chip, once per dataset (the map and the video draw their outline)
+        if ismember(string(viz_type.Value), ["map", "video"]) && viz_outline.Value && isempty(viz_data.outlines) && ~viz_data.photo_searched
+            set_status('Looking for the organoids in the photo of the chip...');     drawnow;
+            photo_in = struct('outline', true);
+            for fld = intersect(["photo", "photo_text_side", "photo_n_organoids"], string(fieldnames(in)))'
+                photo_in.(fld) = in.(fld);
+            end
+            [~, viz_data] = plotMEArecording(viz_data, "data", photo_in);
+            set_status(sprintf('Outline of the organoid: %s.', viz_data.outline_source));
+        end
+    end
+
+    function [f, res] = on_viz_draw(~, ~)
+        % draws the plot chosen in its own window, full size (or makes the video), with "plotMEArecording"
+        f = [];     res = [];
+        if isempty(viz_data)
+            message('Choose a recording with a dataset first (or open a "_QCmanual.mat" file with "Other file...").', 'Visualization');
+            return
+        end
+        type = string(viz_type.Value);
+        try
+            in = viz_inputs();
+        catch ME                                                            % (a choice to correct: a plain message, not an error)
+            viz_problem(ME.message);
+            return
+        end
+        viz_find_outline(in);
+        if opt.test
+            in.visible = false;
+        end
+        if type == "video"
+            in.progress = @viz_progress;
+            viz_draw_button.Enable = 'off';
+            restore = onCleanup(@() viz_enable_draw());
+            set_status('Making the video...');
+        else
+            set_status('Drawing...');
+        end
+        drawnow;
+        try
+            [f, res] = plotMEArecording(viz_data, type, in);
+        catch ME                                                            % (e.g., too many units, no templates: the message says
+            fprintf(2, '%s\n', getReport(ME, 'extended', 'hyperlinks', 'off'));     %  what to change; the details stay in the
+            viz_problem(regexprep(ME.message, '^plotMEArecording: ', ''));           %  Command Window)
+            f = [];     res = [];
+            return
+        end
+        if strlength(res.file) > 0
+            viz_last = res.file;
+            viz_open_button.Enable = 'on';      viz_folder_button.Enable = 'on';
+        end
+        if type == "video"
+            viz_result.Text = sprintf('Video saved: %s (%d frames, %.1f s long)', res.file, res.n_frames, res.n_frames/res.frame_rate);
+            set_status('The video is ready (button "Open the saved file").');
+        elseif strlength(res.file) > 0
+            viz_result.Text = sprintf('Drawn and saved: %s', res.file);
+            set_status('The plot is drawn in its own window, and saved.');
+        else
+            viz_result.Text = sprintf('Drawn: %s of %s, %d neurons, %g-%g s (not saved).', viz_type.Items{strcmp(viz_type.ItemsData, ...
+                viz_type.Value)}, viz_data.name, numel(res.units), res.window(1), res.window(2));
+            set_status('The plot is drawn in its own window.');
+        end
+        if ~opt.test && ~isempty(f) && isvalid(f)
+            figure(f);                                                      % (in front of the window)
+        end
+    end
+
+    function viz_open(folder_only)
+        % opens the last file saved (or its folder) with the program of the system
+        if strlength(viz_last) == 0
+            return
+        end
+        if folder_only
+            open_file(fileparts(viz_last));
+        else
+            open_file(viz_last);
+        end
+    end
+
+    function viz_problem(txt)
+        % a choice of the tab to correct (or a plot that cannot be drawn): status bar and message
+        set_status(['Not drawn: ' char(txt)]);
+        status_label.FontColor = [0.8 0 0];
+        viz_result.Text = ['Not drawn: ' char(txt)];
+        message(char(txt), 'Visualization');
+    end
+
+    function viz_progress(x)
+        if isvalid(fig)
+            set_status(sprintf('Making the video: %d%%', round(100*x)));
+            drawnow;
+        end
+    end
+
+    function viz_enable_draw()
+        if isvalid(fig)
+            viz_draw_button.Enable = ~running;
+        end
+    end
+
+    function folder = row_folder(r)
+        % folder of the row r of the recordings table (relative to the folder of the table when it is not a full path)
+        folder = strtrim(rec_table.Data.folder(r));
+        if isempty(regexp(char(folder), '^(/|~|[A-Za-z]:[\\/]|\\\\)', 'once')) && strlength(table_file) > 0
+            folder = string(fullfile(fileparts(table_file), folder));
+        end
+    end
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%   SMALL HELPERS   %%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -1440,7 +2029,14 @@ end
             'saved for each recording" to rerun with the same settings). To change a value only for this run, search it and type the new ' ...
             'value.\n\n3. Run: press Run. The progress table fills in after each stage; the results of each recording are saved next to its ' ...
             'files, and the Excel tables of each group in the results folder. Stop ends the run after the stage that is running.\n\n' ...
-            'Every run of a recording saves its parameters and a log (<file_name>_parameters.mat, <file_name>_pipeline_log.txt).']);
+            'Every run of a recording saves its parameters and a log (<file_name>_parameters.mat, <file_name>_pipeline_log.txt).\n\n' ...
+            'Cropping (tab 1): "picture" is the photo of the chip (empty: the photo in the folder of the recording; "none": no cropping). ' ...
+            'Every organoid of the photo becomes its own dataset, named with the labels of "organoid_label" (e.g., 56; 57; 58; empty: ' ...
+            'org1, org2...); "picture_organoid" keeps only one of them (its number in the photo). Optional: "picture_3D_side" (side of ' ...
+            'the photo with the "3D" text) and "picture_n_organoids"; "crop_ellipse" or "crop_excel" are used instead of the photo.\n\n' ...
+            '4. Visualization: choose a recording of the table and its dataset, what to draw, the time window (the whole recording, a ' ...
+            'condition, or a window you type) and the units, then press Draw. The plots open in their own windows; the video is saved ' ...
+            'next to the dataset.']);
         if opt.test
             fprintf('%s\n', txt);
         else
@@ -1716,4 +2312,75 @@ if c
 else
     out = b;
 end
+end
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+function [files, labels] = dataset_files(folder, name, organoid_label)
+
+% (new, November 2026) datasets of a recording for the tab Visualization: the files "<name>..._QCmanual.mat" of its folder (after the
+% quality control: "<name>", the cropped "<name>_<label>", the analyzed "..._curated" or "..._integrated"); first the ones of the row (its
+% organoid, when it has one), the analyzed one first
+
+files = strings(0,1);   labels = strings(0,1);
+name = string(name);    organoid_label = string(organoid_label);
+if strlength(name) == 0 || ~isfolder(folder)
+    return
+end
+d = dir(fullfile(folder, name + "*_QCmanual.mat"));
+stems = regexprep(string({d.name})', '_QCmanual\.mat$', '');
+stems = stems(stems == name | startsWith(stems, name + "_"));
+if isempty(stems)
+    return
+end
+analyzed = endsWith(stems, ["_curated", "_integrated"]);
+if strlength(organoid_label) > 0
+    own = stems == name + "_" + organoid_label | startsWith(stems, name + "_" + organoid_label + "_");
+else
+    own = ismember(stems, name + ["", "_curated", "_integrated"]);
+end
+[~, order] = sort(2*own + analyzed, 'descend');
+stems = stems(order);   analyzed = analyzed(order);
+files = string(folder) + filesep + stems + "_QCmanual.mat";
+labels = stems;
+labels(analyzed) = labels(analyzed) + "   (analyzed)";
+
+end
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+function units = parse_units(txt)
+
+% (new, November 2026) unit numbers typed in the tab Visualization: numbers and ranges ("1:20", or "1-20"), separated by spaces or commas
+
+tokens = unit_tokens(txt);
+if isempty(tokens)
+    error('Type the numbers of the units (e.g., 1:20 35 40), or choose "All units"');
+end
+units = [];
+for t = tokens
+    m = regexp(t, '^(\d+):(\d+)$', 'tokens', 'once');
+    if ~isempty(m)
+        a = str2double(m{1});   b = str2double(m{2});
+        if b < a
+            error('The range %s goes down: write it from the smaller number (e.g., %d:%d)', t, b, a);
+        end
+        units = [units, a:b]; %#ok<AGROW>
+    elseif ~isempty(regexp(t, '^\d+$', 'once'))
+        units(end+1) = str2double(t); %#ok<AGROW>
+    else
+        error('"%s" is not a unit number or a range of units (e.g., 1:20)', t);
+    end
+end
+
+end
+
+function tokens = unit_tokens(txt)
+txt = strtrim(string(txt));
+txt = regexprep(txt, '\s*[:\-]\s*', ':');                                 % ("1 - 20" or "1 : 20" -> "1:20")
+tokens = split(regexprep(txt, '[,;\s]+', ' '), ' ')';
+tokens = tokens(strlength(tokens) > 0);
+end
+
+function keys = row_key(T, rows)
+% (new, November 2026) identity of rows of the recordings table (folder, file name, organoid), to follow a recording when rows move
+keys = strtrim(T.folder(rows(:))) + "|" + strtrim(T.file_name(rows(:))) + "|" + strtrim(T.organoid_label(rows(:)));
 end
