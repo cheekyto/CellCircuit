@@ -100,9 +100,9 @@ AmplitudeCV_NETburst = nan(n_cluster,1);
 Distance_NETburst = nan(n_cluster,1);
 DistanceCV_NETburst = nan(n_cluster,1);
 Onset_NETburst = nan(n_cluster,1);
-OnsetCV_NETburst = nan(n_cluster,1);
+OnsetSD_NETburst = nan(n_cluster,1);
 Peak_NETburst = nan(n_cluster,1);
-PeakCV_NETburst = nan(n_cluster,1);
+PeakSD_NETburst = nan(n_cluster,1);
 Correlation_NETburst = nan(n_cluster,1);
 tempStructNeuron_NETburst = nan(n_cluster,1);
 PeakFire_NETburst = nan(n_cluster,1);
@@ -216,9 +216,9 @@ for k=1:n_cluster                                                           % ac
             DistanceCV_NETburst(idx) = NetworkBurstFeature.distance.cv;
             if ~isempty(NetworkBurstStructur.structure)                                  % (revised October 2026) the metrics stay NaN if there is no structure (no participating units)
             Onset_NETburst(idx) = mean(NetworkBurstStructur.structure(:,2),'omitnan');   % onset of the activity, in ms (relative to the peak of the burst)  
-            OnsetCV_NETburst(idx) = std(NetworkBurstStructur.structure(:,2),'omitnan');  % standard deviation, in ms (intended: the standard deviation, not the CV, because the mean is close to 0)
+            OnsetSD_NETburst(idx) = std(NetworkBurstStructur.structure(:,2),'omitnan');  % standard deviation, in ms (not the CV: the mean is close to 0; revised November 2026, user's choice: named OnsetSD_NETburst, before OnsetCV_NETburst)
             Peak_NETburst(idx) = mean(NetworkBurstStructur.structure(:,3),'omitnan');    % peak of the activity, in ms (relative to the peak of the burst)   
-            PeakCV_NETburst(idx) = std(NetworkBurstStructur.structure(:,3),'omitnan');   % standard deviation, in ms (intended, as above)
+            PeakSD_NETburst(idx) = std(NetworkBurstStructur.structure(:,3),'omitnan');   % standard deviation, in ms (as above; named PeakSD_NETburst, before PeakCV_NETburst)
             Correlation_NETburst(idx) = NetworkBurstStructur.correlation;                % correlation coefficient  
             
             % (revised October 2026) the structure and the features use the same participating units (the family's units for options 1 and 2, the 
@@ -265,9 +265,14 @@ for k=1:n_cluster                                                           % ac
         clear NetworkBurstFeature Feature_secondary NetworkBurstStructur 
 end
 
+% (revised November 2026; user's choice) the number of network bursts is 0 whenever no network burst was detected, whatever the reason: the
+% candidate events rejected by the final check of "NetworkBurstDetection" (nBurst = NaN), or a recording with fewer than MIN_UNITS units
+% (before, these rows were blank in the pooled sheet, and the rows of the recordings with few units in every sheet)
+Number_NETburst_Events(isnan(Number_NETburst_Events)) = 0;
+
 NETbursting = table(Organoid, File, ttx_qc, Condition, dose, Number_NETburst_Events, Number_clusters_Netburst, Clustering_Quality, label_cluster_Netburst, Family_Type, Number_NETburst_Neurons, NumberNorm_NETburst_Neurons, Number_Spikes_NETburst, NumberNorm_Spikes_NETburst, NumberNorm_SpikesTotal_NETburst, ...
                     Participation_NETburst, ParticipationCV_NETburst, Rate_NETburst, RateCV_NETburst, FFibi_CV2_NETburst, FFibi_VarMean_NETburst, FFcount_NETburst, MeanCount_NETburst, Duration_NETburst, DurationCV_NETburst, Duration20_NETburst, Duration20CV_NETburst, Duration50_NETburst, Duration50CV_NETburst, Tail_NETburst, TailCV_NETburst, Amplitude_NETburst, AmplitudeCV_NETburst, ...
-                    Distance_NETburst, DistanceCV_NETburst, tempStructNeuron_NETburst, Onset_NETburst, OnsetCV_NETburst, Peak_NETburst, PeakCV_NETburst, Correlation_NETburst, ...
+                    Distance_NETburst, DistanceCV_NETburst, tempStructNeuron_NETburst, Onset_NETburst, OnsetSD_NETburst, Peak_NETburst, PeakSD_NETburst, Correlation_NETburst, ...
                     PeakFire_NETburst, PeakFireNorm_NETburst, Number_SecondaryBurst_Neurons, NumberNorm_SecondaryBurst_Neurons,NumberNorm_SecondaryBurst,ParentNorm_SecondaryBurst,Amplitude_SecondaryBurst);
 
 Compile_NetBurstResults = NETbursting;

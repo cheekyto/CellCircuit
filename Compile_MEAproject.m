@@ -49,8 +49,9 @@ MIN_NETBURST = 1/210;                      % minimum rate of network burst event
 MIN_SECONDARY_RATE = 0.5;                  % minimum average number of secondary peaks per primary event (default: 0.5)
 MIN_PARENT = 0.25;                         % minimum proportion of primary peaks with secondary peaks (default: 0.25)
 MIN_UNITS = 5;                             % (new, November 2026; user's choice) recordings with fewer good units (0 to MIN_UNITS-1) are reported with 0 active
-                                           % neurons (Number_Good_Clusters, Number_Kilosort, Number_3Brain) and 0 Hz (Firing_Rate); every other metric stays blank
-                                           % (NaN). The same value as "MIN_UNITS" of "Analyze_spikeTrain", which does not analyze them (default: 5)
+                                           % neurons (Number_Good_Clusters, Number_Kilosort, Number_3Brain), 0 Hz (Firing_Rate) and (revised November 2026)
+                                           % 0 network bursts (Number_NETburst_Events); every other metric stays blank (NaN). The same value as "MIN_UNITS" of
+                                           % "Analyze_spikeTrain", which does not analyze them (default: 5)
 
 K_MSEC_SEC = 1/1000;                        % factor to rescale from msec to sec
 
@@ -181,12 +182,9 @@ for i=1:n_recordings                                                        % ac
         fprintf("\n WARNING: %s has %g recording conditions, but only %g were analyzed (conditions skipped: %s) \n", Recording{i}, n_conditions, nnz(analyzed), mat2str(find(~analyzed)'));
     end
 
-    ttx = 0;                                                                % =1, if the recording has a TTX condition (among the analyzed conditions)
-    for k=find(analyzed)'
-        if strcmp(PerCondition(k).condition, '+TTX')
-            ttx = 1;
-        end
-    end
+    % =1, if the recording has a TTX condition (among the analyzed conditions). (revised November 2026; user's choice) any label that contains
+    % "TTX" (any case, e.g., "+TTX", "+CGP+TTX", "+TTX 2uM"), the same rule as the cNE sheets; before, only the label "+TTX" exactly
+    ttx = double(any(ttx_conditions(PerCondition, find(analyzed)')));
 
     for k=find(analyzed)'                                                   % across all (analyzed) conditions in experiment i
         idx = idx+1;
@@ -351,9 +349,9 @@ AmplitudeCV_NETburst = nan(n_condition,1);
 Distance_NETburst = nan(n_condition,1);
 DistanceCV_NETburst = nan(n_condition,1);
 Onset_NETburst = nan(n_condition,1);
-OnsetCV_NETburst = nan(n_condition,1);
+OnsetSD_NETburst = nan(n_condition,1);
 Peak_NETburst = nan(n_condition,1);
-PeakCV_NETburst = nan(n_condition,1);
+PeakSD_NETburst = nan(n_condition,1);
 Correlation_NETburst = nan(n_condition,1);
 tempStructNeuron_NETburst = nan(n_condition,1);
 PeakFire_NETburst = nan(n_condition,1);
@@ -405,9 +403,9 @@ for i=1:n_recordings                                                            
             Distance_NETburst(idx) = NetworkBurstFeature.distance.mean;                   % distance of the network burst to the individual spike trains, in msec (peak to midpoint) 
             DistanceCV_NETburst(idx) = NetworkBurstFeature.distance.cv;
             Onset_NETburst(idx) = mean(NetworkBurstStructure.structure(:,2),'omitnan');   % onset of the activity, in ms (relative to the peak of the burst)  
-            OnsetCV_NETburst(idx) = std(NetworkBurstStructure.structure(:,2),'omitnan');  % standard deviation, in ms  
+            OnsetSD_NETburst(idx) = std(NetworkBurstStructure.structure(:,2),'omitnan');  % standard deviation, in ms  
             Peak_NETburst(idx) = mean(NetworkBurstStructure.structure(:,3),'omitnan');    % peak of the activity, in ms (relative to the peak of the burst)   
-            PeakCV_NETburst(idx) = std(NetworkBurstStructure.structure(:,3),'omitnan');   % standard deviation, in ms  
+            PeakSD_NETburst(idx) = std(NetworkBurstStructure.structure(:,3),'omitnan');   % standard deviation, in ms  
             Correlation_NETburst(idx) = NetworkBurstStructure.correlation;                % correlation coefficient  
             
             tempStructNeuron_NETburst(idx) = Number_NETburst_Neurons(idx) - sum(isnan(NetworkBurstStructure.structure(:,1))); % number of neurons with robust temporal structure
@@ -455,7 +453,7 @@ end
 
 NETbursting = table(Organoid, File, ttx_qc, Condition, dose, Number_NETburst_Events, Number_clusters_Netburst, Number_NETburst_Neurons, NumberNorm_NETburst_Neurons, Number_Spikes_NETburst, NumberNorm_Spikes_NETburst, NumberNorm_SpikesTotal_NETburst, ...   ...
                     Participation_NETburst, ParticipationCV_NETburst, Rate_NETburst, RateCV_NETburst, Duration_NETburst, DurationCV_NETburst, Amplitude_NETburst, AmplitudeCV_NETburst, ...
-                    Distance_NETburst, DistanceCV_NETburst, tempStructNeuron_NETburst, Onset_NETburst, OnsetCV_NETburst, Peak_NETburst, PeakCV_NETburst, Correlation_NETburst, ...
+                    Distance_NETburst, DistanceCV_NETburst, tempStructNeuron_NETburst, Onset_NETburst, OnsetSD_NETburst, Peak_NETburst, PeakSD_NETburst, Correlation_NETburst, ...
                     PeakFire_NETburst, PeakFireNorm_NETburst, Number_SecondaryBurst_Neurons, NumberNorm_SecondaryBurst_Neurons,NumberNorm_SecondaryBurst,ParentNorm_SecondaryBurst,Amplitude_SecondaryBurst);
 end
 
@@ -471,7 +469,7 @@ save(file_output, 'Firing','Bursting','NETbursting0', 'NETbursting1','NETburstin
 file_output_excel = fullfile(folderPath, sprintf('%s_Compiled.xlsx', group));
 
 % units of each column, written in the first row of each sheet (revised October 2026: defined once; the rows of "Bursting" -one extra empty cell- 
-% and of the network bursting tables -"#" on the 7th to 9th columns instead of the 6th, 7th and 9th- were shifted; "OnsetCV" and "PeakCV" are 
+% and of the network bursting tables -"#" on the 7th to 9th columns instead of the 6th, 7th and 9th- were shifted; "OnsetSD" and "PeakSD" are 
 % standard deviations, in msec; revised October 2026: column "Clustering_Quality" after "Number_clusters_Netburst"; revised November 2026: column
 % "Family_Type" after "label_cluster_Netburst")
 units_firing = {'','','','','','sec', 'sec', '#','#','#','Hz','ad','ad','msec','ad','#/window','ad','ad','ad','ad'};    % (revised October 2026: CV and Fano factors)
