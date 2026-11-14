@@ -1,7 +1,7 @@
 function [fig, result] = plotMEArecording(data, plot_type, inputs)
 
 % VISUALIZATION OF A RECORDING (revised November 2026: active function, moved out of the folder "legacy" and driven by the tab
-% "4. Visualization" of the window "CellCircuit"; "makeVideo_MEA" merged as the plot "video"; user's choice: the old options 3 -shuffling-,
+% "5. Visualization" of the window "CellCircuit"; "makeVideo_MEA" merged as the plot "video"; user's choice: the old options 3 -shuffling-,
 % 4 -hypersynchronized units-, 7 -autocorrelation- and 8 -raw raster plot- removed, the old options 0 and 1 merged)
 % Plots of the units of a dataset of the pipeline (file "<name>_QCmanual.mat": the units after the quality control; also the curated,
 % integrated and cropped datasets), for the units and the time window chosen:
