@@ -12,9 +12,10 @@ function file = package_CellCircuit(version, output_file)
 % uncommitted changes and files of the working folder never reach the package (before, the files were read from the working folder, so
 % uncommitted edits of committed files, e.g., of the documentation, were packaged too); the uncommitted changes are listed.
 % Included: the functions of the main folder (with the window, CellCircuit.m and common_parameters.m), the recordings template, README,
-% LICENSE and the documentation. Not included: tests, tools, legacy functions, data, and npy-matlab (each user sets its folder in the
-% window, tab Settings). The version and the commit are written in CellCircuit_version.txt, which "run_pipeline" saves in the history of
-% each recording when the code is not a git repository. Tested with MATLAB R2025b.
+% LICENSE and the documentation (docs/FUNCTION_REFERENCE.md and, since November 2026, docs/cNE_METRICS.md). Not included: tests, tools,
+% legacy functions, data, and npy-matlab (each user sets its folder in the window, tab Settings). The version and the commit are written
+% in CellCircuit_version.txt, which "run_pipeline" saves in the history of each recording when the code is not a git repository. Tested
+% with MATLAB R2025b.
 
 if nargin < 1 || strlength(string(version)) == 0
     error("Give the version of the package, e.g., package_CellCircuit(""2.1.0"")");
@@ -52,7 +53,8 @@ fid = fopen(version_file, 'w');   fprintf(fid, '%s\n', version_text);   fclose(f
 
 main_m = string({dir(fullfile(copy, '*.m')).name})';
 files = [fullfile(copy, main_m); version_file; fullfile(copy, ["recordings_template.csv", "README.md", "LICENSE"])'; ...
-         fullfile(copy, "docs", "FUNCTION_REFERENCE.md"); fullfile(copy, "OrganoidsFromPhoto_chip.mat")];   % (pattern of the chip, November 2026)
+         fullfile(copy, "docs", "FUNCTION_REFERENCE.md"); fullfile(copy, "docs", "cNE_METRICS.md"); ...   % (cNE measures: new, November 2026)
+         fullfile(copy, "OrganoidsFromPhoto_chip.mat")];                    % (pattern of the chip, November 2026)
 files = files(isfile(files));
 if ~any(main_m == "CellCircuit.m")
     error("The last commit has no CellCircuit.m");

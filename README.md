@@ -181,6 +181,7 @@ CellCircuit/
 ├── tests/                    regression harness and unit tests (see tests/README.md)
 ├── tools/                    package_CellCircuit.m: builds the install file (.mltbx) of the toolbox and its app
 ├── docs/FUNCTION_REFERENCE.md   detailed documentation of every stage and function, and the list of changes
+├── docs/cNE_METRICS.md        the measures of the coordinated neuronal ensembles (cNE sheets) and how to read them
 └── legacy/                   functions that no stage uses any more
 ```
 
