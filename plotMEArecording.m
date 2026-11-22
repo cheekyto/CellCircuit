@@ -21,7 +21,8 @@ function [fig, result] = plotMEArecording(data, plot_type, inputs)
 % the folder of the recording ("OrganoidsFromPhoto"), otherwise none
 % (user's choices, 14 November 2026) no titles; 4-5 unit numbers on the raster plot; the names of the conditions above the plot; the bin of
 % the population firing rate (200 ms by default) and the unit of the time axis (s by default) can be chosen; the population rate in blue;
-% a quick preview in a panel (parent, preview) for the tab of the window
+% a quick preview in a panel (parent, preview) for the tab of the window. (user's choice, 21 November 2026) the population rate as bars, one
+% per bin (before: a line)
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%   INPUTS   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -164,8 +165,7 @@ switch plot_type
         if population_rate
             ax.XTickLabel = {};
             ax2 = nexttile(tl);
-            stairs(ax2, rate_edges*tf, [result.rate, result.rate(end)], 'Color', RATE_COLOR, 'LineWidth', 0.9);   % (a line: still visible
-                                                                            %  with thousands of bins, unlike bars)
+            draw_rate(ax2, rate_edges*tf, result.rate, RATE_COLOR);         % (revised November 2026: bars, user's choice; before, a line)
             xlim(ax2, [t0 t1]*tf);
             if condition_lines
                 draw_conditions(ax2, D, t0, t1, tf, CONDITION_COLOR);
@@ -328,8 +328,8 @@ switch plot_type
         end
         if population_rate
             axp = nexttile(tl);     ax_time = axp;
-            [rt, rr] = population(T, t0, t1, rate_bin);
-            plot(axp, rt*tf, rr, 'Color', [0.45 0.75 1], 'LineWidth', 1);
+            [~, rr, re] = population(T, t0, t1, rate_bin);
+            draw_rate(axp, re*tf, rr, [0.45 0.75 1]);                       % (revised November 2026: bars, user's choice; before, a line)
             xlim(axp, [t0 t1]*tf);     dark_axes(axp, dark);     ylabel(axp, 'Rate (Hz)');
             if condition_lines && ~raster
                 draw_conditions(axp, D, t0, t1, tf, [1 0.35 0.35]);
@@ -851,6 +851,17 @@ else
 end
 counts = histcounts(vertcat(T{:}), edges);
 rate = counts / max(numel(T), 1) / bin;
+
+end
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+function h = draw_rate(ax, edges, rate, color)
+
+% (new, November 2026; user's choice) population firing rate as bars, one per bin (edges: the edges of the bins, in the unit of the time
+% axis). The outline of each bar has the color of the bar, so that the bars stay visible when they are thinner than a pixel (a long window
+% has thousands of bins); a single graphics object, fast for any number of bins
+
+h = histogram(ax, 'BinEdges', edges, 'BinCounts', rate, 'FaceColor', color, 'EdgeColor', color, 'FaceAlpha', 1, 'LineWidth', 0.5);
 
 end
 
