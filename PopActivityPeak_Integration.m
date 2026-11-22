@@ -1,4 +1,4 @@
-function PopActivityPeak_Integration = PopActivityPeak_Integration(units, spikeTimestamp, BurstDetected, range, bin, threshold, opt_norm, opt_distance, opt_binopti, option_level, opt_plot)
+function PopActivityPeak_Integration = PopActivityPeak_Integration(units, spikeTimestamp, BurstDetected, range, bin, threshold, opt_norm, opt_distance, opt_binopti, option_level, opt_plot, seeds)
 
 % function to detect population activation in a entire spike train data, using the average population firing rate and calling the function "PopulationActivityDetection" 
 % Its goal is to run "PopulationActivityDetection" with different settings to perform the analysis of an entire recording
@@ -21,6 +21,8 @@ function PopActivityPeak_Integration = PopActivityPeak_Integration(units, spikeT
 %   option_level    =1, just analyze the level1 peaks to determine the optimal bin size and the secondary peaks
 %                   =0, analyze all peaks (level0 and level1) to determine the optimal bin size
 %   opt_plot:       =0, no plot; =1: plot the data and the identified network bursts
+%   seeds:          (optional, new November 2026) [start last level] of the events of the previous round of the detection, in sec: seeded noise
+%                   of the large primary events (see "PopulationActivityDetection"); empty (default): the noise of the whole signal, as before
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%   OUTPUT   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -51,7 +53,10 @@ apply_parameters('PopActivityPeak_Integration');                            % (r
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%    Search for the primary peaks
 
-PopActivityPeak_Integration = PopulationActivityDetection(units, spikeTimestamp, range, bin, threshold, 0, opt_norm, 0, 0);
+if nargin < 12
+    seeds = zeros(0,3);                                                     % (new, November 2026) no seeded noise, as before
+end
+PopActivityPeak_Integration = PopulationActivityDetection(units, spikeTimestamp, range, bin, threshold, 0, opt_norm, 0, 0, seeds);
 if opt_distance
     PopActivityPeak_Integration = evaluatePrimaryBursts(PopActivityPeak_Integration);
 end

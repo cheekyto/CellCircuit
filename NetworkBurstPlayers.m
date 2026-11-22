@@ -1,4 +1,4 @@
-function NetworkBurstPlayers = NetworkBurstPlayers(spikeTimestamp, range, PopulationActivityDetected, BurstDetected, option, bin, threshold, opt_distance, option_plot, opt_norm)
+function NetworkBurstPlayers = NetworkBurstPlayers(spikeTimestamp, range, PopulationActivityDetected, BurstDetected, option, bin, threshold, opt_distance, option_plot, opt_norm, seeds)
 
 % function to identify and classify the units involved in network bursting
 % (spikeTimestamp, PopulationActivityDetected, and BurstDetected should be restricted to the same temporal window)
@@ -8,6 +8,9 @@ function NetworkBurstPlayers = NetworkBurstPlayers(spikeTimestamp, range, Popula
 option_test = 2;
 if nargin < 10
     opt_norm = 1;                                                           % (new, November 2026) normalized signal, as before
+end
+if nargin < 11
+    seeds = zeros(0,3);                                                     % (new, November 2026) no seeded noise, as before
 end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -35,6 +38,9 @@ end
 %          = 3          Only participating channels
 %   opt_norm:   (optional, new November 2026) population signal of the final detection of option 2 (see "PopulationActivityDetection"):
 %               =1, normalized firing rate (default, as before); =2, participation with surrogate thresholds (option 4 of "NetworkBurstDetection")
+%               (revised November 2026) also passed to "findChannel_in_Peak", for every option: =2 keeps the windows of option 4 and skips the firing test
+%   seeds:      (optional, new November 2026) [start last level] of the events of the previous round of the detection, in sec: seeded noise of
+%               the final re-detection with the participating units (option 2; see "PopulationActivityDetection"); empty (default): as before
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%   OUTPUT   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -144,10 +150,10 @@ switch option
         NetworkBurstPlayers = PopulationActivityDetected;                   % load the information for the population peaks
         meaningful_activity = [];                                           % (revised October 2026) defined also without primary events (used by the plot)
         if Npeak1 > 0    
-            [NetworkBurstPlayers, n_bursting1, burst_id1, meaningful_activity] = findChannel_in_Peak(BurstDetected, n_channels, t_step, Npeak1, NetworkBurstPlayers, range, option_test, option);
+            [NetworkBurstPlayers, n_bursting1, burst_id1, meaningful_activity] = findChannel_in_Peak(BurstDetected, n_channels, t_step, Npeak1, NetworkBurstPlayers, range, option_test, option, opt_norm);
         end
         if Npeak2 > 0 && ~FAST_MODE
-            [NetworkBurstPlayers.Secondary, n_bursting2, burst_id2, ~] = findChannel_in_Peak(BurstDetected, n_channels, t_step, Npeak2, NetworkBurstPlayers.Secondary, range, option_test, option);
+            [NetworkBurstPlayers.Secondary, n_bursting2, burst_id2, ~] = findChannel_in_Peak(BurstDetected, n_channels, t_step, Npeak2, NetworkBurstPlayers.Secondary, range, option_test, option, opt_norm);
         end
 
         %% Classify the primary network bursts based on the number of bursting neurons participating on it
@@ -266,14 +272,14 @@ switch option
 
         NetworkBurstPlayers = PopulationActivityDetected;                   % load the information for the population peaks
         if Npeak1 > 0    
-            [NetworkBurstPlayers, a, b, c] = findChannel_in_Peak(BurstDetected, n_channels, t_step, Npeak1, NetworkBurstPlayers, range, option_test, option);
+            [NetworkBurstPlayers, a, b, c] = findChannel_in_Peak(BurstDetected, n_channels, t_step, Npeak1, NetworkBurstPlayers, range, option_test, option, opt_norm);
             participation1 = NetworkBurstPlayers.participation;
             participation = participation1;
         else
             participation = [];
         end
         if Npeak2 > 0 && ~FAST_MODE
-            [NetworkBurstPlayers.Secondary, a, b, c] = findChannel_in_Peak(BurstDetected, n_channels, t_step, Npeak2, NetworkBurstPlayers.Secondary, range, option_test, option);
+            [NetworkBurstPlayers.Secondary, a, b, c] = findChannel_in_Peak(BurstDetected, n_channels, t_step, Npeak2, NetworkBurstPlayers.Secondary, range, option_test, option, opt_norm);
             participation2 = NetworkBurstPlayers.Secondary.participation;
             participation = participation + participation2;
         end
@@ -284,7 +290,7 @@ switch option
                 if Npeak2 == 0
                     NetworkBurstPlayers.Secondary.bin = 0;
                 end
-                NetworkBurstPlayers = PopActivityPeak_Integration(participation, spikeTimestamp, BurstDetected, range, bin, threshold, opt_norm, opt_distance, 1, 1, option_plot);  % information about the new population peaks                        
+                NetworkBurstPlayers = PopActivityPeak_Integration(participation, spikeTimestamp, BurstDetected, range, bin, threshold, opt_norm, opt_distance, 1, 1, option_plot, seeds);  % information about the new population peaks                        
             end
 
             NetworkBurstPlayers.ChannelsIntegrated(:,1) = find(participation>0);            % index of all participating neurons
@@ -322,7 +328,7 @@ switch option
                 timeStamp2 = cell(n_peak2, n_channels);
                     
                 if n_peak2 > 0
-                    [NetworkBurstPlayers.Secondary, a, b, c] = findChannel_in_Peak(BurstDetected, n_channels, t_step, n_peak2, NetworkBurstPlayers.Secondary, range, option_test, option);
+                    [NetworkBurstPlayers.Secondary, a, b, c] = findChannel_in_Peak(BurstDetected, n_channels, t_step, n_peak2, NetworkBurstPlayers.Secondary, range, option_test, option, opt_norm);
                     NetworkBurstPlayers.Secondary.Channels(:,1) = find(NetworkBurstPlayers.Secondary.participation>0);   % index of participating neurons in secondary events
                     % (revised November 2026) windows and spikes from "eventSpikes", as for the primary events; same results
                     starts = nan(n_peak2,1);    lasts = nan(n_peak2,1);
@@ -357,7 +363,7 @@ switch option
 
         NetworkBurstPlayers = PopulationActivityDetected;                   % load the information for the population peaks
         if Npeak1 > 0    
-            [NetworkBurstPlayers, a, b, c] = findChannel_in_Peak(BurstDetected, n_channels, t_step, Npeak1, NetworkBurstPlayers, range, option_test, option);
+            [NetworkBurstPlayers, a, b, c] = findChannel_in_Peak(BurstDetected, n_channels, t_step, Npeak1, NetworkBurstPlayers, range, option_test, option, opt_norm);
             participation = NetworkBurstPlayers.participation;
         end
 end

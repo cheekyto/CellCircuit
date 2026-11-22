@@ -1,7 +1,17 @@
-function [Ch_in_Peak, aux_burst, burst_id, meaningful_activity] = findChannel_in_Peak(BurstDetected, n_channels, t_step, Npeak, PopActivity, range, opt_test, option)
+function [Ch_in_Peak, aux_burst, burst_id, meaningful_activity] = findChannel_in_Peak(BurstDetected, n_channels, t_step, Npeak, PopActivity, range, opt_test, option, opt_norm)
 
 % function to identify the channels firing during a population peak
 % (revised October 2026: the spikes within all the events are counted at once -see "windowCounts"-, same results; no "clear" inside the loops)
+% (revised November 2026; user's choices) methods 1-3 (opt_norm = 0 or 1):
+%   - participation window: the half-width of each event plus a part of it on each side, from start50 - LEFT_EXTRA x D50 to last50 +
+%     RIGHT_EXTRA x D50 (D50 = last50 - start50), with no other margin, for the screening filter, the solid events, the shuffle test and the
+%     rate ratio (before: the whole event, from start to last, plus the margins SAFE_K and K_ONSET). Events without valid 50% edges keep the
+%     whole event and the margins
+%   - firing test: the screening and the statistical assessment also require that the number of spikes of the unit within the windows of a
+%     class of events is above STAT_THRESHOLD of the same shuffles as the presence test (a unit firing at a high rate everywhere is present in
+%     the events by chance, and the presence test does not count its spikes)
+% All methods: the screening filter is ACTIVITY_THRESHOLD = 1.8x, as the statistical assessment (before: 3x). Option 4 of "NetworkBurstDetection"
+% (opt_norm = 2) keeps the core of its events, with the margins, and has no firing test (its events are defined by participation)
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%   INPUTS   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -14,6 +24,8 @@ function [Ch_in_Peak, aux_burst, burst_id, meaningful_activity] = findChannel_in
 %   range:                              range of the recording (range(1)=start; range(2)=end), in sec
 %   option = 1                          Genereal screening 
 %          = 2                          Statistical assessement
+%   opt_norm:                           (optional, new November 2026) population signal of the detection (see "PopulationActivityDetection"):
+%                                       =0 or 1, firing rate (methods 1-3; default: 1); =2, participation (option 4 of "NetworkBurstDetection")
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%   OUTPUT   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -30,7 +42,9 @@ function [Ch_in_Peak, aux_burst, burst_id, meaningful_activity] = findChannel_in
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%   PARAMETERS   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 SAFE_K = 0.40;                                  % when saving the spikes for each network burst event, the extra time is added on each side (default: 0.4)                          
-ACTIVITY_THRESHOLD = 3.0;                       % threshold for the ratio between the firing rate within potential network bursts and overall firing rate, for individual neurons (default: 3.0)
+ACTIVITY_THRESHOLD = 1.80;                      % threshold for the ratio between the firing rate within potential network bursts and overall firing rate, for individual neurons
+                                                % (default: 1.8; revised November 2026, user's choice: 3.0 -> 1.8, as ACTIVITY_THRESHOLD_FINAL; with the October 2026 fix of
+                                                %  the rate of the screening, 3x had become stricter than the statistical assessment)
 K_ONSET = 0.20;                                 % when assessing the statistical significance of network burst participation, the extra time is added at the begining (default: 0.2)
 
 MIN_MULTIPLE = 2;                               % minimum number of spikes a unit has to display during a network burst to be considered a multiple unit (default: 2) 
@@ -45,7 +59,15 @@ ACTIVITY_THRESHOLD_FINAL = 1.80;                % (used during statistical asses
                                                 % lower it (1.60) when there is high level of population activity (it is not a few individual units with high level of activity)
 MIN_EVENTS_CLASS = 3;                           % (new, November 2026) the large (level-1) and small (level-0) primary events are evaluated separately (activity filter
                                                 % and statistical assessment) when there are at least MIN_EVENTS_CLASS small events (default: 3; user's choice)
+LEFT_EXTRA = 0.10;                              % (new, November 2026; user's choice) methods 1-3: the participation window of an event starts LEFT_EXTRA x its half-width
+                                                % (D50 = last50 - start50) before its 50% edge before the peak, for the units that fire at its onset (default: 0.10)
+RIGHT_EXTRA = 0.25;                             % (new, November 2026; user's choice) methods 1-3: and ends RIGHT_EXTRA x D50 after its 50% edge after the peak, for the
+                                                % units that fire late in the event (default: 0.25)
 apply_parameters('findChannel_in_Peak');                                    % (revised October 2026) values of the parameter set of "run_pipeline", if any (see "pipeline_parameters")
+if nargin < 9
+    opt_norm = 1;                                                           % (new, November 2026) firing rate, as before
+end
+opt4 = opt_norm == 2;                                                       % (new, November 2026) option 4: the core of its events, with the margins, and no firing test
 
 K_MSEC_SEC = 1/1000;                            % factor to rescale from msec to sec
 
@@ -67,11 +89,13 @@ burst_labels = cell(Npeak, n_channels);                                     % la
 timeStamp = cell(Npeak, n_channels);                                        % time stamps of the spikes from each neurons that happened during the different peaks
 
 ini_Nburst = zeros(Npeak,1);    fin_Nburst = zeros(Npeak,1);                % (revised October 2026) windows of all events, calculated once (before, once per cluster)
+win_mode = zeros(Npeak,1);                                                    % (new, November 2026) window of each event (see "test_window"); 2 = half-width, no margin
 for k=1:Npeak                                                               % across all events 
-    [ini0, fin0] = test_window(PopActivity.IndivBurst(k));                  % (revised November 2026) the whole event, or its core (option 4)
+    [ini0, fin0, win_mode(k)] = test_window(PopActivity.IndivBurst(k), opt4, LEFT_EXTRA, RIGHT_EXTRA);   % (revised November 2026) the whole event, the
+                                                                            % core of option 4, or the half-width window (methods 1-3)
     ini_Nburst(k) = ini0/K_MSEC_SEC;                                        % starting point of the event k, in msec
     fin_Nburst(k) = fin0/K_MSEC_SEC;                                        % last point of the event k, in msec
-    time_added = (fin_Nburst(k)-ini_Nburst(k))*SAFE_K;                      % extra time added on both ends
+    time_added = (fin_Nburst(k)-ini_Nburst(k))*SAFE_K*(win_mode(k) ~= 2);     % extra time added on both ends (revised November 2026: none on the half-width window)
     ini_Nburst(k) = ini_Nburst(k) - time_added;                             % just in case, add more data points to the left
     fin_Nburst(k) = fin_Nburst(k) + time_added;                             % just in case, add more data points to the right
     if n_channels > 0
@@ -147,6 +171,11 @@ for ch=1:n_channels                                                         % ac
             [spikes_total, ~, ~] = windowMembership(BurstDetected{ch}.spikes(:,1), range(1)/K_MSEC_SEC, range(2)/K_MSEC_SEC, 1, 0);
     end
     freq_total = spikes_total/(range(2)-range(1));
+    data = BurstDetected{ch}.spikes(:,1);                                   % (new, November 2026) shuffles of the unit for the firing test (methods 1-3; the same
+    shuffles = [];                                                          %  shuffles as the statistical assessment, see "shuffleCache")
+    if ~isempty(data) && ~opt4
+        shuffles = shuffleCache('get', ch, data, range/K_MSEC_SEC, t_step, N_SHUFFLING, BurstDetected{ch}, RNG_SEED + ch);
+    end
     for g=1:numel(groups)
         ev = groups{g};
         spikes_in = 0;  window_in = 0;
@@ -154,7 +183,12 @@ for ch=1:n_channels                                                         % ac
             spikes_in = spikes_in + numel(PopActivity.timeStamp{k,ch});
             window_in = window_in + PopActivity.IndivBurst(k).window*K_MSEC_SEC;   % extended duration of the event k, in sec (the window of its spikes)
         end
-        if spikes_in/window_in > freq_total * ACTIVITY_THRESHOLD
+        fscore = 0;                                                         % (new, November 2026) firing test: proportion of the shuffles with fewer spikes in the
+        if ~isempty(shuffles) && spikes_in > 0                              % windows of the class than the unit
+            [~, counts] = shuffleHits(shuffles, ini_Nburst(ev), fin_Nburst(ev));
+            fscore = mean(counts < spikes_in);
+        end
+        if spikes_in/window_in > freq_total * ACTIVITY_THRESHOLD && (opt4 || fscore >= STAT_THRESHOLD)
             meaningful_activity(ch) = 1;                                    % the activity during these events is higher than the rest of the recording
         else
             burst_id(ev,ch) = 0;                                            % remove channel ch from these events
@@ -243,11 +277,13 @@ end
 window = nan(Npeak,2);                                                      % temporal window for each burst event
 window2 = nan(Npeak,2);                                                     % auxiliary temporal window for each burst event        
 for k=1:Npeak                                                               % across all network bursts
-    [ini0, fin0] = test_window(PopActivity.IndivBurst(k));                  % (revised November 2026) the whole event, or its core (option 4)
-    window(k,1) = (ini0 - (fin0-ini0)*K_ONSET)/K_MSEC_SEC;                  % starting point of the burst k, in msec
-    window(k,2) = (fin0 + (fin0-ini0)*K_ONSET)/K_MSEC_SEC;                  % last point of the burst k, in msec
-    window2(k,1) = (ini0 - (fin0-ini0)*SAFE_K)/K_MSEC_SEC;                  % starting point of the burst k, in msec
-    window2(k,2) = (fin0 + (fin0-ini0)*SAFE_K)/K_MSEC_SEC;                  % last point of the burst k, in msec
+    [ini0, fin0, win_mode] = test_window(PopActivity.IndivBurst(k), opt4, LEFT_EXTRA, RIGHT_EXTRA);  % (revised November 2026) the whole event, the core of
+                                                                            % option 4, or the half-width window (methods 1-3)
+    k1 = K_ONSET*(win_mode ~= 2);   k2 = SAFE_K*(win_mode ~= 2);             % (revised November 2026) no margin on the half-width window
+    window(k,1) = (ini0 - (fin0-ini0)*k1)/K_MSEC_SEC;                       % starting point of the burst k, in msec
+    window(k,2) = (fin0 + (fin0-ini0)*k1)/K_MSEC_SEC;                       % last point of the burst k, in msec
+    window2(k,1) = (ini0 - (fin0-ini0)*k2)/K_MSEC_SEC;                      % starting point of the burst k, in msec
+    window2(k,2) = (fin0 + (fin0-ini0)*k2)/K_MSEC_SEC;                      % last point of the burst k, in msec
 end
         
 % Identify the participating clusters
@@ -258,6 +294,7 @@ end
 if opt_test == 2
 participation = zeros(n_channels,1);
 groups = event_groups(PopActivity, Npeak, MIN_EVENTS_CLASS);
+n_pass = 0;     n_pass_firing = 0;                                          % (new, November 2026) unit-classes that pass the tests, without and with the firing test
 for ch=1:n_channels                                                         % across all clusters
     data = BurstDetected{ch}.spikes(:,1);                                   % spike train data for channel ch
     if numel(data) == 0                                                     % there are no spikes in cluster ch
@@ -275,10 +312,20 @@ for ch=1:n_channels                                                         % ac
         window_in = sum(window2(ev,2) - window2(ev,1))*K_MSEC_SEC;         % total duration of the (extended) events of this class, in sec
         freq_ratio = (sum(n_events2(ev))/window_in)/freq_total;
         score = numel(find(hits < event))/N_SHUFFLING;
-        if score >= STAT_THRESHOLD && event/numel(ev) > MIN_PARTICIPATION && event >= MIN_PARTICIPATION_ABS && freq_ratio > ACTIVITY_THRESHOLD_FINAL
+        fscore = 1;                                                         % (new, November 2026) firing test (methods 1-3): proportion of the shuffles with fewer
+        if ~opt4                                                            % spikes in the (extended) windows of the class than the unit
+            [~, counts] = shuffleHits(shuffles, window2(ev,1), window2(ev,2));
+            fscore = mean(counts < sum(n_events2(ev)));
+        end
+        pass = score >= STAT_THRESHOLD && event/numel(ev) > MIN_PARTICIPATION && event >= MIN_PARTICIPATION_ABS && freq_ratio > ACTIVITY_THRESHOLD_FINAL;
+        n_pass = n_pass + pass;     n_pass_firing = n_pass_firing + (pass && fscore >= STAT_THRESHOLD);
+        if pass && fscore >= STAT_THRESHOLD
             participation(ch) = 1;                                          % the participation of cluster ch in this class of events is statistically significant
         end
     end
+end
+if ~opt4
+    fprintf("   Statistical assessment: %d unit-classes pass the participation tests, %d of them also the firing test \n", n_pass, n_pass_firing);
 end
 else
 % Identify the participating clusters
@@ -387,16 +434,28 @@ end
 end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-function [ini0, fin0] = test_window(event)
+function [ini0, fin0, mode] = test_window(event, opt4, left_extra, right_extra)
 
 % window to test the participation of the units in an event, in sec: the whole event, or its core when the detection provides it
 % (option 4 of "NetworkBurstDetection": from the start to the peak, plus the same time after the peak, so that the persistent firing after
 % the large events -part of their duration- does not dilute the activity of the units during the event; user's choice, November 2026)
+% (revised November 2026; user's choice) methods 1-3 ("opt4" false): the half-width window, from start50 - left_extra x D50 to last50 +
+% right_extra x D50 (D50 = last50 - start50), when the event has valid 50% edges
+% mode:     =0, the whole event (start to last); =1, the core of option 4; =2, the half-width window (0 and 1 keep the margins of the caller)
 
 ini0 = event.start;
 fin0 = event.last;
+mode = 0;
 if isfield(event, 'coreLast') && ~isempty(event.coreLast) && ~isnan(event.coreLast)
     fin0 = event.coreLast;
+    mode = 1;
+elseif ~opt4 && all(isfield(event, {'start50', 'last50'})) && ~isempty(event.start50) && ~isempty(event.last50)
+    s50 = double(event.start50(1));     l50 = double(event.last50(1));
+    if all(isfinite([s50 l50])) && l50 > s50
+        ini0 = s50 - left_extra*(l50 - s50);
+        fin0 = l50 + right_extra*(l50 - s50);
+        mode = 2;
+    end
 end
 
 end

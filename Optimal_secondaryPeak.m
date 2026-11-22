@@ -335,7 +335,8 @@ if n_window > 0
             % Quality Control on secondary events
             if nbursts > 0  && nbursts >= max(nPeak2)                  
                 PopActivityPeak.Secondary.nBurst = nbursts;
-                NetworkBurstPlayer = NetworkBurstPlayers(spikeTimestamp, range, PopActivityPeak, BurstDetected, 3, bin1, threshold, opt_distance, 0); % statistical assessment                 
+                NetworkBurstPlayer = NetworkBurstPlayers(spikeTimestamp, range, PopActivityPeak, BurstDetected, 3, bin1, threshold, opt_distance, 0, opt_norm); % statistical assessment
+                                                                            % (revised November 2026: opt_norm, so that option 4 keeps its windows in "findChannel_in_Peak")                 
                 n_participating = numel(NetworkBurstPlayer.Channels);      % total number of participating units for primary events
                 unit_min = max(MIN_CHAN, n_participating*MIN_CHAN_SECONDARY);   % minimum number of participating units for secondary events
                 % it will check the secondary events, one by one     
