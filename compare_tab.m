@@ -1,6 +1,7 @@
 function api = compare_tab(tab, ctx)
 
-% TAB "4. Comparison" OF THE WINDOW "CellCircuit": comparison of groups of organoids by their neurons ("CompareNeurons") (new, November 2026)
+% TAB "4. Neuron composition" OF THE WINDOW "CellCircuit": comparison of groups of organoids by their neurons ("CompareNeurons") (new, November 2026;
+% named "4. Comparison" until 22 November 2026, renamed by the user's choice)
 % The tab builds the settings of "CompareNeurons" (the same as a copy of "comparison_settings.m") and runs it:
 %   1. recordings tables (the table of tab 1 and/or others; the groups of a table are in the folder of its results, as for the pipeline)
 %   2. groups found (organoids = "_Analyzed.mat" files of <project>/<group>; compiled = <project>/<group>_Compiled.mat), and the groups used
@@ -164,7 +165,7 @@ api = struct('add_table', @add_table, 'find_groups', @find_groups, 'set_axes_gro
     function add_tab1_table()
         file = ctx.table_file();
         if strlength(file) == 0
-            ctx.message('Open or build a recordings table in tab 1 first (and save it).', 'Comparison');
+            ctx.message('Open or build a recordings table in tab 1 first (and save it).', 'Neuron composition');
             return
         end
         add_table(file, ctx.results_folder());
@@ -206,7 +207,7 @@ api = struct('add_table', @add_table, 'find_groups', @find_groups, 'set_axes_gro
         % groups of the tables, their organoids and compiled files; extra columns of the tables (covariates, random intercepts); columns
         % of the compiled tables (activity measures)
         if isempty(tables)
-            ctx.message('Add a recordings table first.', 'Comparison');
+            ctx.message('Add a recordings table first.', 'Neuron composition');
             return
         end
         old = group_table.Data;
@@ -304,7 +305,7 @@ api = struct('add_table', @add_table, 'find_groups', @find_groups, 'set_axes_gro
 
     function on_add_comparison()
         if isempty(reference_list.Items)
-            ctx.message('Press "Find the groups" first.', 'Comparison');
+            ctx.message('Press "Find the groups" first.', 'Neuron composition');
             return
         end
         add_comparison([string(reference_list.Value), setdiff(string(others_list.Value), string(reference_list.Value), 'stable')]);
@@ -313,7 +314,7 @@ api = struct('add_table', @add_table, 'find_groups', @find_groups, 'set_axes_gro
     function add_comparison(groups)
         groups = reshape(string(groups), 1, []);
         if numel(groups) < 2
-            ctx.message('Choose a reference group and at least one group to compare with it.', 'Comparison');
+            ctx.message('Choose a reference group and at least one group to compare with it.', 'Neuron composition');
             return
         end
         if ~any(cellfun(@(c) isequal(c, groups), comparisons))
@@ -543,7 +544,7 @@ api = struct('add_table', @add_table, 'find_groups', @find_groups, 'set_axes_gro
             ok = true;
         catch ME
             add_log("The comparison stopped: " + ME.message);
-            ctx.message(sprintf('The comparison stopped:\n%s', ME.message), 'Comparison');
+            ctx.message(sprintf('The comparison stopped:\n%s', ME.message), 'Neuron composition');
         end
     end
 

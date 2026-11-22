@@ -284,8 +284,8 @@ fprintf('tab Visualization: recordings, datasets, time window, units, options, n
 
 % (new, November 2026) tab 4: comparison of groups by their neurons ("CompareNeurons"), on the synthetic project of its test
 tab_group = findall(fig3, 'Type', 'uitabgroup');
-assert(isequal(string({tab_group.Children.Title}), ["1. Recordings", "2. Settings", "3. Run", "4. Comparison", "5. Visualization", ...
-    "6. Features plotting"]), "the tabs are not 1. Recordings, 2. Settings, 3. Run, 4. Comparison, 5. Visualization, 6. Features plotting (user's choice)");
+assert(isequal(string({tab_group.Children.Title}), ["1. Recordings", "2. Settings", "3. Run", "4. Neuron composition", "5. Visualization", ...
+    "6. Features plotting"]), "the tabs are not 1. Recordings, 2. Settings, 3. Run, 4. Neuron composition, 5. Visualization, 6. Features plotting (user's choice)");
 cp = t3.compare;   cc = cp.controls;
 compare_project = fullfile(folder, 'compare');
 make_compare_project(compare_project);

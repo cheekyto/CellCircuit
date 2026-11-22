@@ -15,7 +15,7 @@ function out = CellCircuit(varargin)
 %                   the MATLAB preferences of that user) and all the parameters (advanced), with a search
 %   3. Run:         summary of the run and the equivalent command, progress of each recording and stage (filled in during the run), the
 %                   messages of the run, and buttons to open the logs and the Excel results
-%   4. Comparison:  (new, November 2026) comparison of groups of organoids by their neurons ("CompareNeurons"; see "compare_tab"): the
+%   4. Neuron composition: (new, November 2026; "Comparison" until 22 November 2026) comparison of groups of organoids by their neurons ("CompareNeurons"; see "compare_tab"): the
 %                   groups of the recordings tables, the groups used to fit the axes of the neuron scores, the comparisons, the activity
 %                   measures and the models; it has its own button "Run comparison" (the bar at the bottom runs the pipeline)
 %   5. Visualization: (new, November 2026) plots of a recording of the table ("plotMEArecording"): raster plot (+ population firing rate),
@@ -86,7 +86,7 @@ tabs = uitabgroup(main);
 tab_rec = uitab(tabs, 'Title', '1. Recordings');
 tab_set = uitab(tabs, 'Title', '2. Settings');
 tab_run = uitab(tabs, 'Title', '3. Run');
-tab_cmp = uitab(tabs, 'Title', '4. Comparison');                            % (new, November 2026)
+tab_cmp = uitab(tabs, 'Title', '4. Neuron composition');                    % (new, November 2026; renamed from "4. Comparison", user's choice)
 tab_viz = uitab(tabs, 'Title', '5. Visualization');
 tab_feat = uitab(tabs, 'Title', '6. Features plotting');                    % (new, November 2026)
 
@@ -2067,7 +2067,7 @@ end
             'Every organoid of the photo becomes its own dataset, named with the labels of "organoid_label" (e.g., 56; 57; 58; empty: ' ...
             'org1, org2...); "picture_organoid" keeps only one of them (its number in the photo). Optional: "picture_3D_side" (side of ' ...
             'the photo with the "3D" text) and "picture_n_organoids"; "crop_ellipse" or "crop_excel" are used instead of the photo.\n\n' ...
-            '4. Comparison (once the groups are compiled): add the recordings tables, press "Find the groups", tick the groups used to fit ' ...
+            '4. Neuron composition (once the groups are compiled): add the recordings tables, press "Find the groups", tick the groups used to fit ' ...
             'the axes of the neuron scores (at least 20 organoids), add the comparisons, check the activity measures, and press "Run ' ...
             'comparison". "Save settings..." keeps the settings in a file, to run them again.\n\n' ...
             '5. Visualization: choose a recording of the table and its dataset, what to draw, the time window (the whole recording, a ' ...
