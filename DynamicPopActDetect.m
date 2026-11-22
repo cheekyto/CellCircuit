@@ -1,4 +1,4 @@
-function DynamicPopActDetect = DynamicPopActDetect(units, spikeTimestamp, BurstDetected, range, bin_min, bin_max, bin_center, threshold, opt_distance, opt_binopti, opt_norm, opt_plot) 
+function DynamicPopActDetect = DynamicPopActDetect(units, spikeTimestamp, BurstDetected, range, bin_min, bin_max, bin_center, threshold, opt_distance, opt_binopti, opt_norm, opt_plot, seeds) 
 
 % function to detect population activation in a spike train data, using dynamic bin size
 % It calls the functions "PopulationActivityDetection" and "PopActivityPeak_Integration"
@@ -20,6 +20,8 @@ function DynamicPopActDetect = DynamicPopActDetect(units, spikeTimestamp, BurstD
 %   opt_binopti     =0, do not run the bin optimization for the secondary peaks; =1, run the bin optimization
 %                   =value, run the detection with that bin value
 %   opt_plot:   =0, no plot; =1: plot the data and the identified network bursts
+%   seeds:      (optional, new November 2026) [start last level] of the events of the previous round of the detection, in sec: seeded noise of
+%               the large events (see "PopulationActivityDetection"); empty (default): the noise of the whole signal, as before
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%   OUTPUT   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -78,6 +80,9 @@ else                    % refined progression around bin_center
     n_bin = numel(bin_size);
 end
 
+if nargin < 13
+    seeds = zeros(0,3);                                                     % (new, November 2026) no seeded noise, as before
+end
 PopulationActivityDetected = cell(1,n_bin);
 n_burst = nan(n_bin,1);
 ibi = nan(n_bin,1);
@@ -86,7 +91,7 @@ cv_ibi = nan(n_bin,1);
 change_Nburst = nan(n_bin,1);       % change in the number of detected burst events, between consecutive bin sizes
 for k=1:n_bin                       % across all bin sizes
     bin = bin_size(k);
-    PopulationActivityDetected{k} = PopulationActivityDetection(units, spikeTimestamp, range, bin, threshold, 0, opt_norm, 0, 0);
+    PopulationActivityDetected{k} = PopulationActivityDetection(units, spikeTimestamp, range, bin, threshold, 0, opt_norm, 0, 0, seeds);
     
     switch OPTION_LEVEL
         
@@ -209,7 +214,7 @@ if n_bin==1                 % (a single bin size, e.g., the final round of "Netw
 end
 if ~isnan(idx_best)         % the optimal bin size was identified, then look for secondary peaks
 %    opt_plot=1;
-    DynamicPopActDetect = PopActivityPeak_Integration(units, spikeTimestamp, BurstDetected, range, bin_best, threshold, opt_norm, opt_distance, opt_binopti, OPTION_LEVEL, opt_plot);
+    DynamicPopActDetect = PopActivityPeak_Integration(units, spikeTimestamp, BurstDetected, range, bin_best, threshold, opt_norm, opt_distance, opt_binopti, OPTION_LEVEL, opt_plot, seeds);
     DynamicPopActDetect.bin = bin_best;
 else
     DynamicPopActDetect.nBurst = 0;
@@ -223,12 +228,12 @@ if opt_test && opt_plot
 
     if ~isnan(idx_best)
         if idx_best>1
-            PopulationActivityDetected{k} = PopulationActivityDetection(units, spikeTimestamp, range, bin_size(idx_best-1), threshold, 0, 1,0, 1);
+            PopulationActivityDetected{k} = PopulationActivityDetection(units, spikeTimestamp, range, bin_size(idx_best-1), threshold, 0, 1,0, 1, seeds);
         end
-        PopulationActivityDetected{k} = PopulationActivityDetection(units, spikeTimestamp, range, bin_size(idx_best), threshold, 0, 1, 0,1);
+        PopulationActivityDetected{k} = PopulationActivityDetection(units, spikeTimestamp, range, bin_size(idx_best), threshold, 0, 1, 0,1, seeds);
         title('Ideal bin size')
         if idx_best<numel(bin_size)
-            PopulationActivityDetected{k} = PopulationActivityDetection(units, spikeTimestamp, range, bin_size(idx_best+1), threshold, 0, 1,0, 1);
+            PopulationActivityDetected{k} = PopulationActivityDetection(units, spikeTimestamp, range, bin_size(idx_best+1), threshold, 0, 1,0, 1, seeds);
         end
     else
         idx_best=1;

@@ -1,6 +1,14 @@
-function PopulationActivityDetection = PopulationActivityDetection(units, spikeTimestamp, range, bin, threshold, smoothWindowAdd, opt_norm, opt_secondary, opt_plot)
+function PopulationActivityDetection = PopulationActivityDetection(units, spikeTimestamp, range, bin, threshold, smoothWindowAdd, opt_norm, opt_secondary, opt_plot, seeds)
 
 % function to detect population activation in a spike train data, using the average population firing rate 
+% (revised November 2026; user's choices) seeded noise (methods 1-3, primary events, "seeds" not empty): the events of the previous round of the
+% detection ("seeds", see "NetworkBurstDetection") give the noise of the large events: the standard deviation of the smoothed signal outside the
+% seed events and their tails (the tails as in the second round), with a floor at SEED_NOISE_FLOOR_SD x the standard deviation of the whole
+% signal, and without the "big mountain" reduction. This seeded threshold only confirms as large the peaks inside the LARGE seed events (level
+% 1); every other peak must pass the current threshold (standard deviation of the whole signal, with the "big mountain" reduction) to be large,
+% and otherwise goes to the second round (small events) as before. With less than SEED_MIN_OUTSIDE of the signal outside the seed events and
+% their tails, the seeds are not used. Before, the large events themselves inflated the noise of the whole signal, so on recordings with long
+% or frequent network bursts the threshold rose above them
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%   INPUTS   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -25,6 +33,8 @@ function PopulationActivityDetection = PopulationActivityDetection(units, spikeT
 %   opt_plot:   =0, no plot; =1: plot the data and the identified network bursts
 %   smoothWindow:       smoothing window length, in number of bins (default: 3; odd for symmetric smoothing)
 %   opt_secondary:      =1, detection of secondary peaks; =0, detection of primary peaks
+%   seeds(j,:):         (optional, new November 2026) [start last level] of the events of the previous round of the detection, in sec (level: 1 =
+%                       large, 0 = small); seeded noise of the large events (see above); empty (default): the noise of the whole signal, as before
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%   OUTPUT   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -69,6 +79,10 @@ TAIL_FACTOR = 3;                                % (new, November 2026) the tail 
 NOISE_ROBUST = 1;                               % (new, November 2026) noise of the second round (small events): 1 = robust, 1.4826 x the median absolute
                                                 % deviation of the signal without the large events and their tails; 0 = standard deviation (before)
 NOISE_FLOOR_SD = 0.25;                          % (new, November 2026) floor of the robust noise, as a proportion of the standard deviation (default: 0.25)
+SEED_NOISE_FLOOR_SD = 0.25;                     % (new, November 2026; user's choice) floor of the seeded noise, as a proportion of the standard deviation of the whole
+                                                % signal (default: 0.25, as NOISE_FLOOR_SD)
+SEED_MIN_OUTSIDE = 0.30;                        % (new, November 2026; user's choice) minimum proportion of the signal outside the seed events and their tails to use
+                                                % the seeded noise (default: 0.30)
 SECONDARY_NOISE_TAIL = 1;                       % (new, November 2026; user's choice) noise of the search of secondary events (opt_secondary = 1, threshold > 0):
                                                 % 1 = standard deviation of the search window without the decay of the large event at its start (until the
                                                 % signal first falls to the median of the window, as the tails of the large events); 0 = standard deviation of
@@ -88,6 +102,9 @@ apply_parameters('PopulationActivityDetection');                            % (r
 if nargin == 0                                                              % (new, November 2026) parameters only: the edges of the events added by
     PopulationActivityDetection = struct('START_LEVEL', START_LEVEL, 'END_LEVEL', END_LEVEL);   % option 5 of "NetworkBurstDetection"
     return
+end
+if nargin < 10
+    seeds = zeros(0,3);                                                     % (new, November 2026) no seeded noise, as before
 end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -152,6 +169,48 @@ if use_surrogate
         smoothWindow, time_binned, spikes, opt_secondary, N_SURROGATE, SURROGATE_SEED, ALPHA_LARGE, PERCENTILE_SMALL, ALPHA_SECONDARY);
     n_smoothing = 0;                                                            % (the search with the SD threshold below is skipped)
 end
+% (new, November 2026; user's choices) seeded noise (see above): bins outside the seed events and their tails (seed_mask), and bins inside the
+% large seed events (seed_in)
+seed_mask = [];
+if ~opt_secondary && ~use_surrogate && threshold0 ~= 0 && ~isempty(seeds)
+    seed_y = smoothdata(spikes, 'gaussian', SMOOTH_FACTOR(1) + smoothWindowAdd);   % tails measured on the first smoothing, as in the second round
+    seed_t = time_binned(:);
+    seed_si = nan(size(seeds,1),1);     seed_ei = seed_si;
+    for j=1:size(seeds,1)
+        seed_a = find(seed_t + bin/2 > seeds(j,1), 1);                      % bins that overlap the seed event
+        seed_b = find(seed_t - bin/2 < seeds(j,2), 1, 'last');
+        if ~isempty(seed_a) && ~isempty(seed_b) && seed_b >= seed_a
+            seed_si(j) = seed_a;    seed_ei(j) = seed_b;
+        end
+    end
+    seed_ok = ~isnan(seed_si);
+    seed_level = ones(size(seeds,1),1);
+    if size(seeds,2) >= 3
+        seed_level = seeds(:,3);
+    end
+    seed_si = seed_si(seed_ok);     seed_ei = seed_ei(seed_ok);     seed_level = seed_level(seed_ok);
+    seed_out = true(numel(seed_y),1);
+    seed_in = false(numel(seed_y),1);
+    if ~isempty(seed_si)
+        seed_te = tail_limits(seed_y, seed_si, seed_ei, TAIL_FACTOR);
+        for j=1:numel(seed_si)
+            seed_out(seed_si(j):max(seed_ei(j), seed_te(j))) = false;       % the noise is measured outside all the seed events and their tails
+            if seed_level(j) == 1
+                seed_in(seed_si(j):seed_ei(j)) = true;                      % only the large seed events confirm
+            end
+        end
+    end
+    seed_share = mean(seed_out);
+    if seed_share >= SEED_MIN_OUTSIDE && sum(seed_out) >= MIN_POINTS
+        seed_mask = seed_out;
+        fprintf("   Seeded noise: %d seed events, %.0f%% of the signal outside them and their tails (SD outside / SD of the whole signal = %.2f) \n", ...
+            numel(seed_si), 100*seed_share, std(seed_y(seed_out))/std(seed_y));
+    else
+        fprintf("   Seeded noise not used: %.0f%% of the signal outside the %d seed events and their tails (minimum %.0f%%) \n", ...
+            100*seed_share, numel(seed_si), 100*SEED_MIN_OUTSIDE);
+    end
+end
+threshold_seed = threshold;                                                     % (new, November 2026) seeded threshold: no "big mountain" reduction
 if ~opt_secondary && ~use_surrogate
     signal = spikes;
     p95 = prctile(signal, PERCENTILE_TOP);
@@ -196,8 +255,22 @@ if opt_secondary && threshold0 ~= 0 && SECONDARY_NOISE_TAIL
     end
 end
 threshold_peak = noise_peak*threshold;                                         % threshold to identify the peak of potential network burst events
+thr_seed = inf;                                                                 % (new, November 2026) seeded threshold, only inside the large seed events
+is_large = @(l, p) p(:) > threshold_peak;                                       % large peaks (l: bin index, p: prominence); without seeds, as before
+if ~isempty(seed_mask)
+    thr_seed = max(std(smoothedSpikes(seed_mask)), SEED_NOISE_FLOOR_SD*std(smoothedSpikes))*threshold_seed;
+    is_large = @(l, p) p(:) > threshold_peak | (seed_in(l(:)) & p(:) > thr_seed);
+end
 if numel(smoothedSpikes) >= MIN_POINTS
-    [pks, locs, widths, proms] = findpeaks(smoothedSpikes, MinPeakProminence=threshold_peak);
+    [pks, locs, widths, proms] = findpeaks(smoothedSpikes, MinPeakProminence=min(threshold_peak, thr_seed));
+    if ~isempty(seed_mask)                                                      % (new, November 2026) the peaks below the current threshold are kept only
+        keep_seed = is_large(locs, proms);                                      % when the seeded threshold confirms them (inside a large seed event)
+        if sm == 1
+            fprintf("   Seeded noise: %d peaks above the current threshold (%.2f SD), %d more confirmed inside the large seed events (seeded threshold %.2f SD) \n", ...
+                sum(proms(:) > threshold_peak), threshold_peak/std(smoothedSpikes), sum(keep_seed & ~(proms(:) > threshold_peak)), thr_seed/std(smoothedSpikes));
+        end
+        pks = pks(keep_seed);   locs = locs(keep_seed);     widths = widths(keep_seed);     proms = proms(keep_seed);
+    end
 else
     pks = [];
 end
@@ -262,7 +335,7 @@ if contador>0
         for j=1:contador
             in_tail = in_tail | (locs2(:) >= start_Nburst(j) & locs2(:) <= tail_end(j));
         end
-        drop = in_tail & proms2(:) <= threshold_peak;
+        drop = in_tail & ~is_large(locs2, proms2);                          % (revised November 2026: with seeds, the large peaks confirmed by the seeded threshold stay)
         pks2(drop) = [];    locs2(drop) = [];   widths2(drop) = [];     proms2(drop) = [];
 
         netBurstLimits = QuickNetBurstLimits(pks2, locs2, proms2, smoothedSpikes, START_LEVEL, END_LEVEL);
@@ -276,7 +349,7 @@ if contador>0
     end
             
     peak_level = zeros(numel(locs_final),1);
-    peak_level(find(proms_final > threshold_peak)) = 1;
+    peak_level(is_large(locs_final, proms_final)) = 1;                      % (revised November 2026: with seeds, also the peaks confirmed by the seeded threshold)
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%     Integrate the events that overlap and generate the final list of network bursts

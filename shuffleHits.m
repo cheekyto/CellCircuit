@@ -1,8 +1,9 @@
-function hits = shuffleHits(entry, w_ini, w_fin)
+function [hits, counts] = shuffleHits(entry, w_ini, w_fin)
 
 % function to count, for each shuffled spike train, the number of temporal windows with at least one spike (revised October 2026)
 % Same result as calling "windowCounts" with each shuffled train, one after the other (see "findChannel_in_Peak"), but all the shuffles at
 % once: each spike is identified by an integer key (shuffle and bin index), so the comparisons with the windows are exact
+% (revised November 2026) second output: the number of spikes of each shuffled train within the windows (the firing test of "findChannel_in_Peak")
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%   INPUTS   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -14,6 +15,7 @@ function hits = shuffleHits(entry, w_ini, w_fin)
 %%%%%%%%%%%%%%%%%%%%%%%%%   OUTPUT   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % hits(i):              number of windows in which the shuffled train i has at least one spike (column array)
+% counts(i):            (new, November 2026) total number of spikes of the shuffled train i within the windows (summed over the windows; column array)
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -32,6 +34,7 @@ first = cummax(below_ini(:) + 1);
 after = max(first, below_fin(:) + 1);
 n_events = reshape(after - first, n_win, n_shuffle);                        % number of spikes of each shuffle within each window
 hits = sum(n_events > 0, 1)';
+counts = sum(n_events, 1)';                                                 % (new, November 2026) spikes of each shuffle within the windows
 
 end
 

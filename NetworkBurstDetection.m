@@ -7,6 +7,16 @@ function NetworkBurstDetection=NetworkBurstDetection(spikeTrain, BurstDetected, 
 % THRESHOLD in NetworkBurstDetection
 % ACTIVITY_THRESHOLD_FINAL in findChannel_in_Peak
 
+% (revised November 2026; user's choices) methods 1-3 (and option 3 inside option 5):
+%   - the minimum number of robustly participating units is at least MIN_ROBUST_FLOOR (6, the number of active units every event needs)
+%   - seeded noise: the final round (seeds: the events of the preliminary round) and the final re-detection with the participating units,
+%     inside "NetworkBurstPlayers" (seeds: the events of the final round, or of the preliminary round when the final round is skipped), measure
+%     the noise of their large events outside the seed events and their tails (see "PopulationActivityDetection")
+%   - the participation of the units is tested on the half-width window of each event and with a firing test, and the screening filter is
+%     1.8x (see "findChannel_in_Peak"; the 1.8x screening filter also applies to option 4)
+% Option 5: when option 4 found large events with a bin larger than the default bin of option 3 (BIN_DEFAULT), the default bin of option 3 is
+% the average of the two; the large events of option 4 that option 5 adds must pass the recruitment check (RECRUIT_REL_MIN_OPTION4)
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%   INPUTS   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %   structure array spikeTimestamp (its length is the number of recording channels), with the following fields
@@ -24,6 +34,7 @@ function NetworkBurstDetection=NetworkBurstDetection(spikeTrain, BurstDetected, 
 %                       thresholds from surrogates (each unit circularly shifted): see "PopulationActivityDetection" (opt_norm = 2)
 %               =5      (new, November 2026) option 3, plus the large (level-1) events of option 4 that option 3 does not have, added as
 %                       small (level-0) events characterized as those of option 3 (see "add_large_option4"); option 4 runs first
+%                       (revised November 2026: the added events must pass the recruitment check, with RECRUIT_REL_MIN_OPTION4)
 %   option_plot:
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -53,6 +64,9 @@ THRESHOLD_BURST_WITH_UNITS = 0.50;              % minimum proportion of potentia
 K_MSEC_SEC = 1/1000;                            % factor to rescale from msec to sec
 MIN_CHAN_RATIO = 0.075;                         % minimum number of participating channels/units to classify an organoid as network bursting, as a proportion of the total number of units (default: 0.075)
 MIN_CHAN_BURST_RATIO = 0.01;                    % minimum number of channels/units in a single network burst, as a proportion of the total number of units (default: 0.05)
+MIN_ROBUST_FLOOR = 6;                           % (new, November 2026; user's choice) methods 1-3: the minimum number of robustly participating units (MIN_ROBUST of each
+                                                % method) is at least MIN_ROBUST_FLOOR, the number of active units every event needs ("PopulationActivitySize"); with
+                                                % fewer units no event can pass (default: 6). Option 4 keeps its MIN_ROBUST
 
 FACTOR_FIRST_ROUND = 0.80;                       % (default: 0.8)
 
@@ -75,6 +89,8 @@ RECRUIT_PEAK_BINS = 2;                          % (new, November 2026) small eve
 RECRUIT_REL_MIN = 0.20;                         % (new, November 2026) small events: minimum relative recruitment r = (f - b)/(F_large - b) in that window, i.e. the
                                                 % proportion of what the large events recruit above the baseline b (r = 1, as a typical large event; r = 0, as
                                                 % the baseline); 0 = no minimum (default: 0.20; user's choice; 0.15 with the global baseline, before the local one)
+RECRUIT_REL_MIN_OPTION4 = 0.15;                 % (new, November 2026; user's choice) option 5: minimum relative recruitment of the large events of option 4 that it adds
+                                                % (the same check as the small events of option 3, which keep RECRUIT_REL_MIN) (default: 0.15)
 RECRUIT_LOCAL_BINS = 20;                        % (new, November 2026) small events: the baseline b is the recruitment just before and after the event, in this
                                                 % number of detection bins on each side (outside the large events and their tails; the quieter side); 0 = the
                                                 % global chance level f0, as before (default: 20; user's choice)
@@ -149,6 +165,13 @@ if add_option4
         large4 = Detected4.IndivBurst([Detected4.IndivBurst.level] == 1);
     end
     fprintf("\n Option 5: option 4 found %d large events; now running option 3 \n", numel(large4));
+    % (new, November 2026; user's choice) when option 4 found large events with a bin larger than the default bin of option 3, the default bin
+    % of option 3 (used only where its search of the bin size fails: first round, refined round) is the average of the two
+    if ~isempty(large4) && isfield(Detected4, 'bin') && ~isempty(Detected4.bin) && isfinite(Detected4.bin(1)) && Detected4.bin(1) > BIN_DEFAULT
+        fprintf("\n Option 5: default bin of option 3 = average of %.0f ms and the bin of option 4 (%.0f ms) = %.0f ms \n", ...
+            1000*BIN_DEFAULT, 1000*Detected4.bin(1), 1000*(BIN_DEFAULT + Detected4.bin(1))/2);
+        BIN_DEFAULT = (BIN_DEFAULT + Detected4.bin(1))/2;
+    end
     option_method = 3;
 end
 if option_method==3
@@ -165,6 +188,9 @@ fixed_bin = false;                                                          % (r
 if option_method==1
     option_method=2;
     fixed_bin = true;
+end
+if signal ~= 2                                                              % (new, November 2026; user's choice) methods 1-3: at least MIN_ROBUST_FLOOR robustly
+    MIN_ROBUST = max(MIN_ROBUST, MIN_ROBUST_FLOOR);                         % participating units (option 4 keeps its MIN_ROBUST)
 end
 
 t0=tic;
@@ -215,7 +241,8 @@ switch option_method
             fprintf("\n Participation signal with surrogate thresholds (step 2 out of 4, %f min) \n", toc(t1)/60);
         end
         t2 = tic;
-        NetworkBurstPlayer_beta = NetworkBurstPlayers(spikeTrain, range, PopulationActivityDetected_beta, BurstDetected, 1, PopulationActivityDetected_beta.bin , THRESHOLD*FACTOR_FIRST_ROUND, opt_distance, 0);  % robust vs weak
+        NetworkBurstPlayer_beta = NetworkBurstPlayers(spikeTrain, range, PopulationActivityDetected_beta, BurstDetected, 1, PopulationActivityDetected_beta.bin , THRESHOLD*FACTOR_FIRST_ROUND, opt_distance, 0, signal);  % robust vs weak
+                                                                            % (revised November 2026: "signal", so that option 4 keeps its windows in "findChannel_in_Peak")
 
         % Refined/final analysis; look for population peaks using only the robustly participating clusters
         % NOTE (October 2026): the refined round ("alpha"), the final round and the final re-detection with the participating units (inside 
@@ -259,7 +286,11 @@ switch option_method
             end
             fprintf("\n About to run the final round of Peak detection (step 3 out of 4, %f min) ... \n ", toc(t2)/60);
             t3=tic;
-            PopulationActivityDetected = DynamicPopActDetect(units, spikeTrain, BurstDetected, range, bin_final, bin_final, nan, THRESHOLD, opt_distance, 1, signal, option_plot); % final round of peak detection, using "bin_final"          
+            seeds = zeros(0,3);                                             % (new, November 2026; user's choice) methods 1-3: seeded noise, with the events of
+            if signal ~= 2                                                  % the preliminary round as seeds (see "PopulationActivityDetection")
+                seeds = seed_events(PopulationActivityDetected_beta);
+            end
+            PopulationActivityDetected = DynamicPopActDetect(units, spikeTrain, BurstDetected, range, bin_final, bin_final, nan, THRESHOLD, opt_distance, 1, signal, option_plot, seeds); % final round of peak detection, using "bin_final"          
                                                                             % (revised October 2026) plots only if option_plot (before, always: opt_plot = 1, which also ran
                                                                             %  up to 3 extra detections, only to plot them, in "DynamicPopActDetect")
         end
@@ -268,7 +299,11 @@ switch option_method
         fprintf("   We are starting with %g primary events (%g level1) and %g secondary events \n",PopulationActivityDetected.nBurst, PopulationActivityDetected.nBurst_level1, PopulationActivityDetected.Secondary.nBurst);
         t4=tic;
         % Statistical assessment and final "PopActivityPeak_Integration" with the final list of participating units
-        NetworkBurstPlayer = NetworkBurstPlayers(spikeTrain, range, PopulationActivityDetected, BurstDetected, 2, bin_final, THRESHOLD, opt_distance, option_plot, signal); % statistical assessment 
+        seeds = zeros(0,3);                                                 % (new, November 2026; user's choice) methods 1-3: seeded noise of the final re-detection,
+        if signal ~= 2                                                      % with the events of the final round (or of the preliminary round, when the final round
+            seeds = seed_events(PopulationActivityDetected);                %  is skipped) as seeds
+        end
+        NetworkBurstPlayer = NetworkBurstPlayers(spikeTrain, range, PopulationActivityDetected, BurstDetected, 2, bin_final, THRESHOLD, opt_distance, option_plot, signal, seeds); % statistical assessment 
         fprintf("   After the statistical assessment, we have %g primary events (%g level1) and %g secondary events \n",NetworkBurstPlayer.nBurst, NetworkBurstPlayer.nBurst_level1,NetworkBurstPlayer.Secondary.nBurst);
 
         % Final Quality Control on primary events
@@ -413,12 +448,12 @@ switch option_method
         end
 
         % (new, November 2026; user's design) option 5: the large events of option 4 that match no event of option 3 (large, small or
-        % secondary) are added as small (level-0) events, characterized as the events of option 3, after all the checks of option 3; they are
-        % not tested by the recruitment check (they passed the surrogate test of option 4 as large events; user's choice)
+        % secondary) are added as small (level-0) events, characterized as the events of option 3, after all the checks of option 3 (revised
+        % November 2026; user's choice: they must pass the recruitment check, with RECRUIT_REL_MIN_OPTION4; before, they were not tested)
         info5 = [];
         if add_option4
             [NetworkBurstPlayer, info5] = add_large_option4(NetworkBurstPlayer, large4, spikeTrain, BurstDetected, range, ADD_MATCH_TOL, ...
-                {RECRUIT_PERCENTILE, RECRUIT_N_SURROGATE, RECRUIT_SEED, RECRUIT_EXCLUDE_TAIL, RECRUIT_PEAK_BINS, RECRUIT_REL_MIN, RECRUIT_LOCAL_BINS, RECRUIT_SECONDARY_CORE});
+                {RECRUIT_PERCENTILE, RECRUIT_N_SURROGATE, RECRUIT_SEED, RECRUIT_EXCLUDE_TAIL, RECRUIT_PEAK_BINS, RECRUIT_REL_MIN_OPTION4, RECRUIT_LOCAL_BINS, RECRUIT_SECONDARY_CORE});
         end
 
         if isnan(NetworkBurstPlayer.nBurst) || NetworkBurstPlayer.nBurst==0
@@ -465,8 +500,10 @@ function [NBP, info] = add_large_option4(NBP, large4, spikeTrain, BurstDetected,
 %   - no network bursting in option 3: nothing is added (option 3 decides whether the recording bursts)
 %   - a large event of option 4 whose peak is inside a closed zone of option 3 (a large event and its tail) is not added (as in option 3,
 %     the tails are closed to the small events)
-%   - the added events are not tested by the recruitment check (they passed the surrogate test of option 4 as large events); their relative
-%     recruitment is printed ("recruit": inputs of "recruitment_check" after "range")
+%   - (revised November 2026; user's choice) the added events must pass the recruitment check, as the small events of option 3 (the same check,
+%     unchanged, on a copy with the large events of option 3; "recruit": its inputs after "range", with RECRUIT_REL_MIN_OPTION4 as the minimum
+%     relative recruitment); the ones it removes are not added. Before, they were not tested (they passed the surrogate test of option 4 as
+%     large events), so the small events that option 3 had removed with the recruitment check could come back through option 4
 % Each added event is characterized by the same code as the events of option 3 (so a change to option 3 applies here too), on the signal of
 % the final detection of option 3 (same bin, units and smoothing): the peak is the highest local maximum of that signal within the event of
 % option 4; its candidate edges come from "QuickNetBurstLimits" (START_LEVEL / END_LEVEL of its prominence, between the neighbouring events of
@@ -561,10 +598,21 @@ if n_new > 0
         new(k).tail = tail(k,1);
         new(k).window = window(k);
     end
-    % relative recruitment of the added events, printed only (the same check as the small events of option 3, on a copy)
+    % (revised November 2026; user's choice) the recruitment check of the added events (the same check as the small events of option 3, on a
+    % copy with the large events of option 3): the ones it removes are not added
     T = NBP;    T.IndivBurst = [E([E.level] == 1), new];    T.nBurst = numel(T.IndivBurst);     T.timeStamp = {};   T.Secondary = struct('nBurst', 0);
-    fprintf("\n Option 5: relative recruitment of the added events (printed only: they are not tested) ");
-    recruitment_check(T, spikeTrain, range, recruit{:});
+    fprintf("\n Option 5: recruitment check of the events of option 4 (minimum relative recruitment %.2f) ", recruit{6});
+    T = recruitment_check(T, spikeTrain, range, recruit{:});
+    kept = [];
+    if isfield(T, 'IndivBurst') && ~isempty(T.IndivBurst) && isfield(T.IndivBurst, 'origin')
+        o4 = arrayfun(@(x) isequal(x.origin, 4), T.IndivBurst);
+        kept = [T.IndivBurst(o4).peak];
+    end
+    keep = ismember([new.peak], kept);
+    fprintf("\n Option 5: %d of the %d events of option 4 pass the recruitment check \n", sum(keep), n_new);
+    new = new(keep);    rows = rows(keep,:);    n_new = numel(new);
+end
+if n_new > 0
     % insertion after the last event of option 3 with an earlier peak (the order of the events of option 3 does not change)
     key = [(1:numel(E))'; arrayfun(@(x) sum([E.peak] < x.peak) + 0.5, new(:))];
     [~, o] = sort(key);
@@ -838,4 +886,28 @@ merged = complement_intervals(complement_intervals(intervals, range), range);
 if ~isempty(merged)
     merged = merged(merged(:,2) > merged(:,1), :);
 end
+end
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+function s = seed_events(D)
+
+% (new, November 2026) [start last level] of the primary events of a detection (large and small), in sec: the seeds of the noise of the next
+% detection (see "PopulationActivityDetection"); level: 1 = large, 0 = small (only the large ones confirm a peak as large in the next detection)
+
+s = zeros(0,3);
+if ~isstruct(D) || ~isfield(D, 'IndivBurst') || ~isfield(D, 'nBurst') || isempty(D.nBurst) || isnan(D.nBurst(1)) || D.nBurst(1) == 0
+    return
+end
+for k=1:min(D.nBurst(1), numel(D.IndivBurst))
+    e = D.IndivBurst(k);
+    if isfield(e, 'start') && isfield(e, 'last') && ~isempty(e.start) && ~isempty(e.last) && isfinite(e.start(1)) && isfinite(e.last(1))
+        lv = 1;
+        if isfield(e, 'level') && ~isempty(e.level) && isfinite(e.level(1))
+            lv = double(e.level(1) == 1);
+        end
+        s(end+1,:) = [e.start(1) e.last(1) lv]; %#ok<AGROW>
+    end
+end
+
 end
