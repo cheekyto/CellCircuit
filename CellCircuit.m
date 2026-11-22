@@ -5,7 +5,7 @@ function out = CellCircuit(varargin)
 %   CellCircuit                         opens the window
 %   CellCircuit('table', "rec.xlsx")    opens the window with a recordings table already loaded
 %
-% Five tabs, and a bar with the buttons Run and Stop that is always visible:
+% Six tabs, and a bar with the buttons Run and Stop that is always visible:
 %   1. Recordings:  the recordings table of "run_pipeline" (one row per recording): open it, add the recordings found in a folder, edit it
 %                   (tick boxes "include", group, units to discard, ...) and save it (.xlsx or .csv)
 %   2. Settings:    what to run (the whole pipeline, from a stage to the end, or some stages), which parameters (the default file
@@ -21,6 +21,10 @@ function out = CellCircuit(varargin)
 %   5. Visualization: (new, November 2026) plots of a recording of the table ("plotMEArecording"): raster plot (+ population firing rate),
 %                   bursts of each unit, electrode map, spike waveforms, and a video of the electrode map (MP4); the recording, its
 %                   dataset, the time window (whole recording, a condition, or typed), the units and the options are chosen in the tab
+%   6. Features plotting: (new, November 2026) plots of any measure of the compiled tables ("<group>_Compiled.xlsx"), comparing the groups
+%                   chosen ("plotFeatures"; see "features_tab"): points with a bar (mean +/- SEM or SD), a violin plot or a box plot
+%                   (median, percentiles, mean), one panel per measure, one block of groups per recording condition; saved as an image or
+%                   a PDF, and the values drawn exported to Excel
 % The run is the same as calling "run_pipeline" with the equivalent command shown in the tab Run. Stop: the run stops after the stage that
 % is running (a stage cannot be interrupted). The folder of npy-matlab and the last table are remembered (MATLAB preferences "CellCircuit").
 %
@@ -84,6 +88,7 @@ tab_set = uitab(tabs, 'Title', '2. Settings');
 tab_run = uitab(tabs, 'Title', '3. Run');
 tab_cmp = uitab(tabs, 'Title', '4. Comparison');                            % (new, November 2026)
 tab_viz = uitab(tabs, 'Title', '5. Visualization');
+tab_feat = uitab(tabs, 'Title', '6. Features plotting');                    % (new, November 2026)
 
 % bar at the bottom (always visible)
 bar = uigridlayout(main, [1 5], 'ColumnWidth', {'1x', 90, 120, 90, 70}, 'Padding', [0 0 0 0]);
@@ -238,6 +243,12 @@ compare = compare_tab(tab_cmp, struct('table_file', @tab1_table_file, 'results_f
     'guard', @guard, 'with_dialog', @with_dialog, 'open_file', @open_file, 'test', opt.test));
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Tab 6: plots of the compiled measures, comparing groups (new, November 2026; built by "features_tab")
+
+features = features_tab(tab_feat, struct('results_folder', @results_folder, 'message', @message, 'guard', @guard, ...
+    'with_dialog', @with_dialog, 'open_file', @open_file, 'test', opt.test));
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Tab 5: visualization (new, November 2026; see "plotMEArecording")
 % (revised, user's choices, 14 November 2026) a preview of the plot instead of the equivalent command; the options under the units
 
@@ -367,12 +378,12 @@ tabs.SelectionChangedFcn = guard(@on_tab_change);
 viz_update_view();
 fig.UserData.test = struct('open_table', @open_table, 'add_folder', @add_folder, 'start_folder', @start_folder, 'set_change', @set_change, 'run', @on_run, ...
     'add_to_common', @add_to_common, 'set_change_common', @set_change_common, 'remove_from_common', @remove_from_common, 'default_list', @on_default_list, 'common', @get_common, ...
-    'stop', @on_stop, 'check', @check_settings, 'command', @command_text, 'save_param_file', @save_param_file, 'compare', compare, ...
+    'stop', @on_stop, 'check', @check_settings, 'command', @command_text, 'save_param_file', @save_param_file, 'compare', compare, 'features', features, ...
     'viz_fill', @viz_fill_recordings, 'viz_load', @viz_load, 'viz_draw', @on_viz_draw, 'viz_inputs', @viz_inputs, 'viz_data', @get_viz_data, ...
     'controls', struct('group', group_field, 'what_mode', what_mode, 'from_stage', from_stage, 'only_checks', only_checks, 'param_mode', param_mode, ...
     'param_file', param_file_field, 'renew', renew_list, 'npy', npy_field, 'project', project_field, 'rec_table', rec_table, ...
     'progress', progress_table, 'log', log_area, 'status', status_label, 'param_table', param_table, 'stop_error', stop_error_box, ...
-    'tabs', tabs, 'tab_viz', tab_viz, 'viz_rec', viz_rec, 'viz_dataset', viz_dataset, 'viz_type', viz_type, 'viz_time', viz_time, ...
+    'tabs', tabs, 'tab_viz', tab_viz, 'tab_feat', tab_feat, 'viz_rec', viz_rec, 'viz_dataset', viz_dataset, 'viz_type', viz_type, 'viz_time', viz_time, ...
     'viz_from', viz_from, 'viz_to', viz_to, 'viz_units_mode', viz_units_mode, 'viz_units', viz_units, 'viz_pop', viz_pop, ...
     'viz_raster', viz_raster, 'viz_cond', viz_cond, 'viz_measure', viz_measure, 'viz_limit', viz_limit, 'viz_outline', viz_outline, ...
     'viz_step', viz_step, 'viz_speed', viz_speed, 'viz_save', viz_save, 'viz_info', viz_info, 'viz_result', viz_result, ...
@@ -2061,7 +2072,10 @@ end
             'comparison". "Save settings..." keeps the settings in a file, to run them again.\n\n' ...
             '5. Visualization: choose a recording of the table and its dataset, what to draw, the time window (the whole recording, a ' ...
             'condition, or a window you type) and the units, then press Draw. The plots open in their own windows; the video is saved ' ...
-            'next to the dataset.']);
+            'next to the dataset.\n\n' ...
+            '6. Features plotting (once the groups are compiled): add the groups of tab 1 (or compiled files), tick the groups to plot, ' ...
+            'choose the table, the measures and the conditions, and the plot (bar with SEM or SD, violin, or box plot). Draw opens the ' ...
+            'plots; Save figure... saves them; Export values... writes the values drawn and their summary to Excel.']);
         if opt.test
             fprintf('%s\n', txt);
         else

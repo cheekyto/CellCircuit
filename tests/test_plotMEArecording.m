@@ -7,7 +7,7 @@ function passed = test_plotMEArecording(code_dir)
 %      listed first; two conditions with the same name numbered), window of the recording; the structure of "data" = the file
 %   2. raster: every spike of the units and window chosen is drawn, in the rows of the units (4-5 of them labelled with their numbers;
 %      axis "Neuron"), with the start of each condition and its name above the plot (on a second row when it would overlap), no title;
-%      population firing rate = spikes of all the units / number of units / bin (Hz), in blue, with the bin chosen; the time axis in s, min or ms; the window
+%      population firing rate = spikes of all the units / number of units / bin (Hz), as blue bars (one per bin), with the bin chosen; the time axis in s, min or ms; the window
 %      of a condition (by name or number) and a window given; the preview in a panel (raster plot as an image, nothing saved)
 %   3. bursts: the planted bursts are found and marked (first spike), none in a window without bursts; at most MAX_BURST_UNITS units
 %   4. map: rate of each electrode (sum of its units for "mean", largest for "median"), x to the right and y upwards, NaN without
@@ -94,7 +94,7 @@ n_all = sum(cellfun(@(t) sum(t >= 0 & t < 90), trains));
 axs = findobj(f, 'Type', 'axes');
 lines_c = findobj(f, 'Tag', 'condition');
 names_c = findobj(f, 'Tag', 'condition_name');
-rate_line = findobj(f, 'Type', 'stair');
+rate_bars = findobj(f, 'Type', 'histogram');                                % (revised November 2026: bars, one per bin)
 edges = 0:0.2:90;
 direct = histcounts([trains{:}], edges)/6/0.2;                              % (spikes of the 6 units / number of units / bin, user's choice)
 ax_r = axs(arrayfun(@(a) contains(string(a.YLabel.String), "Neuron"), axs));
@@ -102,9 +102,10 @@ ax_p = axs(arrayfun(@(a) contains(string(a.YLabel.String), "Population"), axs));
 ok = R.n_spikes == n_all && numel(axs) == 2 && max(abs(R.rate - direct)) < 1e-9 && numel(R.rate_time) == 450 && ...
     numel(lines_c) == 2 && all([lines_c.Value] == 60) && numel(names_c) == 2 && isequal(sort(string({names_c.String})), ["+TTX", "Baseline"]) && ...
     all(arrayfun(@(h) h.Position(2) == ax_r.YLim(2) && strcmp(h.VerticalAlignment, 'bottom'), names_c)) && ...
-    isscalar(ax_r) && isscalar(ax_p) && string(ax_p.YLabel.String) == "Population rate (Hz)" && isequal(rate_line.Color, [0 0.35 0.80]) && ...
+    isscalar(ax_r) && isscalar(ax_p) && string(ax_p.YLabel.String) == "Population rate (Hz)" && isscalar(rate_bars) && isequal(rate_bars.FaceColor, [0 0.35 0.80]) && ...
+    max(abs(rate_bars.BinEdges - edges)) < 1e-9 && max(abs(rate_bars.BinCounts - direct)) < 1e-9 && ...
     all(arrayfun(@(a) isempty(a.Title.String), axs)) && numel(ax_r.YTick) <= 5;
-passed = report("raster, whole recording: every spike, population rate = direct count (Hz, blue), names of the conditions above the plot, no title", ok) && passed;
+passed = report("raster, whole recording: every spike, population rate = direct count (Hz, blue bars, one per bin), names of the conditions above the plot, no title", ok) && passed;
 close(f);
 [f, R] = plotMEArecording(D, "raster", struct('visible', false, 'units', [3 1], 'condition', "+TTX", 'population_rate', false));
 ax = findobj(f, 'Type', 'axes');

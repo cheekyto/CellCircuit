@@ -9,7 +9,9 @@ function test_CellCircuit()
 % (whole recording, a condition, or typed) and the units, shows only the options of the plot chosen (bin of the population rate, unit of
 % the time axis, names of the conditions...), draws a preview of the plot that follows every choice and reports wrong choices in it, and
 % draws the plots and the video (on a synthetic dataset), and (8, November 2026) tab 4 (comparison of groups by their neurons)
-% finds the groups, reports the problems, saves and opens a settings file and runs "CompareNeurons" (synthetic project).
+% finds the groups, reports the problems, saves and opens a settings file and runs "CompareNeurons" (synthetic project), and (9, November 2026) tab 6
+% (features plotting) reads compiled files, follows the groups, measures, conditions and plot chosen in its preview, shows the options of
+% the plot chosen, exports the values and saves the figure (synthetic compiled files).
 % A run itself needs recordings: see the "progress" option of "run_pipeline".
 
 root = fileparts(fileparts(mfilename('fullpath')));
@@ -282,8 +284,8 @@ fprintf('tab Visualization: recordings, datasets, time window, units, options, n
 
 % (new, November 2026) tab 4: comparison of groups by their neurons ("CompareNeurons"), on the synthetic project of its test
 tab_group = findall(fig3, 'Type', 'uitabgroup');
-assert(isequal(string({tab_group.Children.Title}), ["1. Recordings", "2. Settings", "3. Run", "4. Comparison", "5. Visualization"]), ...
-    "the tabs are not 1. Recordings, 2. Settings, 3. Run, 4. Comparison, 5. Visualization (user's choice)");
+assert(isequal(string({tab_group.Children.Title}), ["1. Recordings", "2. Settings", "3. Run", "4. Comparison", "5. Visualization", ...
+    "6. Features plotting"]), "the tabs are not 1. Recordings, 2. Settings, 3. Run, 4. Comparison, 5. Visualization, 6. Features plotting (user's choice)");
 cp = t3.compare;   cc = cp.controls;
 compare_project = fullfile(folder, 'compare');
 make_compare_project(compare_project);
@@ -328,6 +330,48 @@ assert(cp.run(), "the comparison did not run");
 assert(~isempty(dir(fullfile(folder, 'compare_results', 'tabtest_*.xlsx'))) && any(contains(string(cc.log.Value), "Done:")), ...
     "the results of the comparison were not written");
 fprintf('tab 4: groups found, problems reported, settings saved and opened again, comparison run\n');
+
+% (9, November 2026) tab 6: plots of the compiled measures, comparing the groups chosen ("plotFeatures"), on synthetic compiled files
+ffolder = fullfile(folder, 'features');     mkdir(ffolder);
+for grp = ["G1", "G2", "G3"]
+    k = find(["G1", "G2", "G3"] == grp);
+    Organoid = {'o1'; 'o2'; 'o1'; 'o2'};    File = {'f1'; 'f2'; 'f3'; 'f4'};    ttx_qc = [1; 1; 1; 1];
+    Condition = {'Baseline'; 'Baseline'; '+TTX'; '+TTX'};   dose = {''; ''; ''; ''};
+    Firing_Rate = k + [1; 2; 0.1; 0.2];     CV_ISI = [1; 1.5; 2; 2.5];
+    Firing = table(Organoid, ttx_qc, File, Condition, dose, Firing_Rate, CV_ISI);  %#ok<NASGU>
+    save(fullfile(ffolder, grp + "_Compiled.mat"), 'Firing');
+end
+fig6 = CellCircuit('test', true);
+closer6 = onCleanup(@() delete(fig6));
+F6 = fig6.UserData.test.features;   c6 = F6.controls;
+assert(contains(fig6.UserData.test.controls.tab_feat.Title, "Features plotting"), "no tab Features plotting");
+assert(isempty(findobj(c6.preview, 'Type', 'axes')) && contains(c6.info.Text, "once groups are added"), "a preview before any group");
+F6.add_files(string(fullfile(ffolder, ["G1", "G2", "G3"] + "_Compiled.mat")));
+assert(height(c6.groups.Data) == 3 && all(c6.groups.Data.Plot) && isequal(string(c6.sheet.Items), "Firing") && ...
+    isequal(string(c6.measures.Value), "Firing_Rate") && isequal(string(c6.conditions.Value), "Baseline") && ...
+    isscalar(findobj(c6.preview, 'Type', 'axes')) && contains(c6.info.Text, "6 values drawn"), "groups added: %s", c6.info.Text);
+% untick a group, rename one; several measures and conditions; box plot
+Dt = c6.groups.Data;    Dt.Plot(2) = false;     Dt.Group(3) = "third";     c6.groups.Data = Dt;
+c6.measures.Value = {'Firing_Rate', 'CV_ISI'};   c6.conditions.Value = {'Baseline', '+TTX'};   c6.style.Value = 'box';
+c6.style.ValueChangedFcn(c6.style, []);
+[style, in] = F6.inputs();
+assert(style == "box" && isequal(in.groups, [1 3]) && in.labels(3) == "third" && isequal(in.conditions, ["Baseline", "+TTX"]) && ...
+    numel(findobj(c6.preview, 'Type', 'axes')) == 2 && contains(c6.info.Text, "16 values drawn"), "choices of the tab: %s", c6.info.Text);
+% options shown with the plot chosen
+assert(~c6.error.Visible && c6.whiskers.Visible, "the options of the box plot are not the ones shown");
+c6.style.Value = 'bar';   c6.style.ValueChangedFcn(c6.style, []);
+assert(c6.error.Visible && ~c6.whiskers.Visible, "the options of the bar plot are not the ones shown");
+% export and save
+xfile = fullfile(folder, 'features_values.xlsx');
+F6.export(xfile);
+Vx = readtable(xfile, 'Sheet', 'Values');   Sx = readtable(xfile, 'Sheet', 'Summary');
+assert(height(Vx) == 16 && height(Sx) == 2*2*2 && all(ismember(string(Sx.Group), ["G1", "third"])), "export of the values");
+saved = F6.save(fullfile(folder, 'features.pdf'));
+assert(isfile(saved), "the figure was not saved");
+% nothing chosen: reported in the preview, not an error
+c6.measures.Value = {};     F6.preview();
+assert(contains(c6.info.Text, "Choose at least one measure") && isempty(findobj(c6.preview, 'Type', 'axes')), "no measure: %s", c6.info.Text);
+fprintf('tab 6: compiled files read, groups chosen (ticked, renamed), measures and conditions, preview, options, export and save\n');
 fprintf('test_CellCircuit: all checks passed\n');
 
 end
